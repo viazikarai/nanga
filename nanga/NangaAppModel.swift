@@ -9,6 +9,21 @@ final class NangaAppModel {
     init(selectedProject: NangaProject = .sample) {
         self.selectedProject = selectedProject
     }
+
+    var currentIteration: IterationState {
+        get { selectedProject.currentIteration }
+        set { selectedProject.currentIteration = newValue }
+    }
+
+    var currentTaskTitle: String {
+        get { currentIteration.task.title }
+        set { currentIteration.task.title = newValue }
+    }
+
+    var currentTaskDetail: String {
+        get { currentIteration.task.detail }
+        set { currentIteration.task.detail = newValue }
+    }
 }
 
 struct NangaProject: Identifiable, Equatable {
@@ -83,6 +98,11 @@ struct IterationState: Equatable {
 struct TaskDraft: Equatable {
     var title: String
     var detail: String
+
+    var isReadyForExecution: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 struct SignalItem: Identifiable, Equatable {

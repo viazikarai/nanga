@@ -5,7 +5,7 @@ struct ContentView: View {
 
     var body: some View {
         let project = appModel.selectedProject
-        let iteration = project.currentIteration
+        let iteration = appModel.currentIteration
 
         NavigationSplitView {
             projectSidebar(project: project)
@@ -66,6 +66,10 @@ struct ContentView: View {
                 statusBadge(title: iteration.execution.status.rawValue, tint: .blue)
                 statusBadge(title: "\(iteration.signal.count) Signal Items", tint: .green)
                 statusBadge(title: "\(iteration.scope.files.count) Files In Scope", tint: .orange)
+                statusBadge(
+                    title: iteration.task.isReadyForExecution ? "Task Ready" : "Task Needs Input",
+                    tint: iteration.task.isReadyForExecution ? .mint : .red
+                )
             }
         }
         .padding(20)
@@ -88,10 +92,37 @@ struct ContentView: View {
     private func taskPanel(task: TaskDraft) -> some View {
         panel(title: "Current Task", systemImage: "text.bubble") {
             VStack(alignment: .leading, spacing: 8) {
-                Text(task.title)
-                    .font(.title3.weight(.semibold))
-                Text(task.detail)
+                Text("This is the first editable iteration surface. The task should define the frame the rest of Nanga carries forward.")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+
+                TextField(
+                    "What is the current task?",
+                    text: Binding(
+                        get: { appModel.currentTaskTitle },
+                        set: { appModel.currentTaskTitle = $0 }
+                    ),
+                    prompt: Text("Describe the current task")
+                )
+                .textFieldStyle(.roundedBorder)
+
+                TextField(
+                    "What should happen in this iteration?",
+                    text: Binding(
+                        get: { appModel.currentTaskDetail },
+                        set: { appModel.currentTaskDetail = $0 }
+                    ),
+                    prompt: Text("Add execution detail"),
+                    axis: .vertical
+                )
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(3...6)
+
+                Label(
+                    task.isReadyForExecution ? "Task frame is ready for execution." : "Task frame needs both a title and execution detail.",
+                    systemImage: task.isReadyForExecution ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(task.isReadyForExecution ? .green : .orange)
             }
         }
     }

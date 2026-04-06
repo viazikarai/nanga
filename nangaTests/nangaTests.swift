@@ -35,4 +35,12 @@ struct nangaTests {
         #expect(state.carryForwardSummary == "Saving 2 signal items and 3 scoped files for the next iteration.")
     }
 
+    @Test func taskDraftRequiresTitleAndDetailForExecution() async throws {
+        let emptyTask = TaskDraft(title: "   ", detail: "Build the task surface")
+        let readyTask = TaskDraft(title: "Build task input", detail: "Make the current task editable in the shell")
+
+        #expect(emptyTask.isReadyForExecution == false)
+        #expect(readyTask.isReadyForExecution)
+    }
+
 }
