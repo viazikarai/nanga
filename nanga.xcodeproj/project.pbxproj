@@ -24,6 +24,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		E54EE3652F83EEB70021BD34 /* AGENTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = "<group>"; };
 		E54EE33D2F83ECEA0021BD34 /* nanga.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = nanga.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E54EE34A2F83ECEC0021BD34 /* nangaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = nangaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E54EE3542F83ECEC0021BD34 /* nangaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = nangaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +76,7 @@
 		E54EE3342F83ECEA0021BD34 = {
 			isa = PBXGroup;
 			children = (
+				E54EE3652F83EEB70021BD34 /* AGENTS.md */,
 				E54EE33F2F83ECEA0021BD34 /* nanga */,
 				E54EE34D2F83ECEC0021BD34 /* nangaTests */,
 				E54EE3572F83ECEC0021BD34 /* nangaUITests */,
