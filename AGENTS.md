@@ -441,6 +441,39 @@ Do not:
 
 The explanation should be technically specific. It should help the user understand both the code change and the product implication of the change.
 
+## Commit Message Rules
+
+Use concise conventional commit prefixes.
+
+Preferred prefixes:
+
+- `feat:` for new product behavior or user-visible capability
+- `fix:` for bug fixes
+- `refactor:` for structural code changes without intended behavior change
+- `test:` for adding or updating tests
+- `docs:` for documentation changes
+- `chore:` for tooling, maintenance, or project configuration
+
+Commit messages should:
+
+- be lowercase after the prefix
+- describe the actual change, not vague activity
+- reflect Nanga's product language when relevant
+- stay short enough to scan quickly
+
+Prefer:
+
+- `feat: build initial nanga iteration shell`
+- `feat: add task signal and scope surfaces`
+- `fix: correct saved iteration state rendering`
+- `test: cover carry-forward iteration summary`
+
+Avoid:
+
+- vague messages such as `feat: stuff`
+- overly broad summaries that hide the actual change
+- commit subjects written like status updates instead of code history
+
 ## Code Quality
 
 - keep code readable and maintainable
