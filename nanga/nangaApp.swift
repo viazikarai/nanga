@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct nangaApp: App {
+    @State private var appModel = NangaAppModel()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(appModel)
         }
     }
 }

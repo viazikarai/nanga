@@ -10,8 +10,29 @@ import Testing
 
 struct nangaTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+    @Test func carryForwardSummaryReflectsSignalAndScopeCounts() async throws {
+        let state = IterationState(
+            task: TaskDraft(title: "Task", detail: "Detail"),
+            signal: [
+                SignalItem(kind: .taskIntent, title: "Intent"),
+                SignalItem(kind: .constraint, title: "Constraint")
+            ],
+            scope: ScopeSnapshot(
+                surfaces: [.taskInput, .signalPanel],
+                files: ["A.swift", "B.swift", "C.swift"]
+            ),
+            execution: ExecutionSummary(
+                status: .ready,
+                headline: "Ready",
+                detail: "Not yet executed"
+            ),
+            savedState: SavedIterationState(
+                summary: "Saved",
+                carriedForwardItems: ["task intent"]
+            )
+        )
+
+        #expect(state.carryForwardSummary == "Saving 2 signal items and 3 scoped files for the next iteration.")
     }
 
 }
