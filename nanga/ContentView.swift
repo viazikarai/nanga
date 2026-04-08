@@ -1,230 +1,513 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Environment(NangaAppModel.self) private var appModel
+    @State private var isImportingProjectRoot = false
+    @FocusState private var focusedInput: InputField?
+
+    private let sidebarWidth: CGFloat = 280
+    private let panelSpacing: CGFloat = 16
+
+    private enum InputField {
+        case title
+        case detail
+    }
 
     var body: some View {
         let project = appModel.selectedProject
         let iteration = appModel.currentIteration
 
-        NavigationSplitView {
-            projectSidebar(project: project)
-        } detail: {
-            mainCanvas(iteration: iteration)
+        HStack(spacing: 0) {
+            sidebar(project: project, iteration: iteration)
+                .frame(width: sidebarWidth)
+
+            Divider()
+                .overlay(theme.border)
+
+            mainWorkspace(iteration: iteration)
         }
-        .navigationSplitViewStyle(.balanced)
-    }
-
-    private func projectSidebar(project: NangaProject) -> some View {
-        List {
-            Section("Project") {
-                LabeledContent("Name", value: project.name)
-                LabeledContent("Repository", value: project.repositoryName)
-            }
-
-            Section("Iteration Loop") {
-                Label("Current Task", systemImage: "text.bubble")
-                Label("Selected Signal", systemImage: "dot.scope")
-                Label("Active Scope", systemImage: "square.stack.3d.up")
-                Label("Execution Result", systemImage: "bolt.horizontal")
-                Label("Saved State", systemImage: "tray.full")
-            }
-        }
-        .listStyle(.sidebar)
-        .navigationTitle("Nanga")
-    }
-
-    private func mainCanvas(iteration: IterationState) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                hero(iteration: iteration)
-
-                LazyVGrid(columns: [
-                    GridItem(.adaptive(minimum: 320), spacing: 16, alignment: .top)
-                ], alignment: .leading, spacing: 16) {
-                    taskPanel(task: iteration.task)
-                    signalPanel(signal: iteration.signal)
-                    scopePanel(scope: iteration.scope)
-                    executionPanel(execution: iteration.execution)
-                    savedStatePanel(savedState: iteration.savedState, carryForwardSummary: iteration.carryForwardSummary)
-                }
-            }
-            .padding(24)
-        }
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-    private func hero(iteration: IterationState) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Iteration Shell")
-                .font(.system(size: 30, weight: .semibold, design: .rounded))
-            Text("Nanga is organized around the live working frame: task, signal, scope, result, and saved next-iteration state.")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 12) {
-                statusBadge(title: iteration.execution.status.rawValue, tint: .blue)
-                statusBadge(title: "\(iteration.signal.count) Signal Items", tint: .green)
-                statusBadge(title: "\(iteration.scope.files.count) Files In Scope", tint: .orange)
-                statusBadge(
-                    title: iteration.task.isReadyForExecution ? "Task Ready" : "Task Needs Input",
-                    tint: iteration.task.isReadyForExecution ? .mint : .red
-                )
-            }
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.93, green: 0.96, blue: 1.0),
-                            Color(red: 0.96, green: 0.93, blue: 0.90)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+        .background(theme.baseBackground)
+        .fileImporter(
+            isPresented: $isImportingProjectRoot,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false,
+            onCompletion: handleProjectImport
         )
     }
 
-    private func taskPanel(task: TaskDraft) -> some View {
-        panel(title: "Current Task", systemImage: "text.bubble") {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("This is the first editable iteration surface. The task should define the frame the rest of Nanga carries forward.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+    private func sidebar(project: NangaProject, iteration: IterationState) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("NANGA")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(theme.cyan)
+                    Text("Agent workflow console")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(theme.primaryText)
+                    Text("Iteration-first workspace for scoped execution.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(theme.secondaryText)
+                }
 
-                TextField(
-                    "What is the current task?",
-                    text: Binding(
-                        get: { appModel.currentTaskTitle },
-                        set: { appModel.currentTaskTitle = $0 }
-                    ),
-                    prompt: Text("Describe the current task")
-                )
-                .textFieldStyle(.roundedBorder)
+                sidebarSection("Projects") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        sidebarValue(label: "Active", value: project.name)
+                        sidebarValue(label: "Repository", value: project.repositoryName)
+                        sidebarValue(label: "Root", value: appModel.projectRootPath)
 
-                TextField(
-                    "What should happen in this iteration?",
-                    text: Binding(
-                        get: { appModel.currentTaskDetail },
-                        set: { appModel.currentTaskDetail = $0 }
-                    ),
-                    prompt: Text("Add execution detail"),
-                    axis: .vertical
-                )
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(3...6)
+                        Button(appModel.hasProjectRoot ? "Change Folder" : "Open Folder") {
+                            isImportingProjectRoot = true
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
+                    }
+                }
 
-                Label(
-                    task.isReadyForExecution ? "Task frame is ready for execution." : "Task frame needs both a title and execution detail.",
-                    systemImage: task.isReadyForExecution ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-                )
-                .foregroundStyle(task.isReadyForExecution ? .green : .orange)
+                sidebarSection("Current Task") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(iteration.task.title.isEmpty ? "No active task title" : iteration.task.title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(theme.primaryText)
+                            .lineLimit(2)
+
+                        Text(iteration.task.detail.isEmpty ? "No execution detail yet." : iteration.task.detail)
+                            .font(.system(size: 12))
+                            .foregroundStyle(theme.secondaryText)
+                            .lineLimit(4)
+
+                        HStack(spacing: 8) {
+                            consoleBadge(iteration.task.isReadyForExecution ? "READY" : "INPUT", tint: iteration.task.isReadyForExecution ? theme.cyan : theme.gold)
+                            consoleBadge("\(appModel.selectedFileCount) FILES", tint: theme.cyanMuted)
+                        }
+                    }
+                }
+
+                sidebarSection("Iteration History") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if project.iterationHistory.isEmpty {
+                            Text("No saved iterations yet.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(theme.secondaryText)
+                        } else {
+                            ForEach(project.iterationHistory.prefix(6)) { record in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(record.label)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(theme.primaryText)
+                                        .lineLimit(1)
+                                    Text(record.savedAt, format: .dateTime.month().day().hour().minute())
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(theme.secondaryText)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                                .background(theme.panelBackground)
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .background(theme.sidebarBackground)
+    }
+
+    private func mainWorkspace(iteration: IterationState) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: panelSpacing) {
+                topCommandSurface(iteration: iteration)
+
+                HStack(alignment: .top, spacing: panelSpacing) {
+                    signalPanel(signal: iteration.signal)
+                    scopePanel(iteration: iteration)
+                }
+
+                outputPanel(iteration: iteration)
+            }
+            .padding(20)
+        }
+        .background(theme.baseBackground)
+    }
+
+    private func topCommandSurface(iteration: IterationState) -> some View {
+        consolePanel(title: "Task Input", symbol: "terminal") {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        glowingInputShell(title: "Task", isFocused: focusedInput == .title) {
+                            TextField(
+                                "",
+                                text: Binding(
+                                    get: { appModel.currentTaskTitle },
+                                    set: { appModel.currentTaskTitle = $0 }
+                                ),
+                                prompt: Text("State the current task").foregroundStyle(theme.placeholderText)
+                            )
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(nsColor(theme.primaryText))
+                            .focused($focusedInput, equals: .title)
+                        }
+
+                        glowingInputShell(title: "Execution Intent", isFocused: focusedInput == .detail) {
+                            ZStack(alignment: .topLeading) {
+                                if appModel.currentTaskDetail.isEmpty {
+                                    Text("Describe the exact outcome for this iteration")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(theme.placeholderText)
+                                        .padding(.top, 2)
+                                        .allowsHitTesting(false)
+                                }
+
+                                TextEditor(text: Binding(
+                                    get: { appModel.currentTaskDetail },
+                                    set: { appModel.currentTaskDetail = $0 }
+                                ))
+                                .scrollContentBackground(.hidden)
+                                .font(.system(size: 13))
+                                .foregroundColor(nsColor(theme.primaryText))
+                                .frame(minHeight: 110)
+                                .focused($focusedInput, equals: .detail)
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .trailing, spacing: 10) {
+                        Button("Open Folder") {
+                            isImportingProjectRoot = true
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tint: theme.gold))
+
+                        Button("Discover") {
+                            appModel.discoverCandidateFiles()
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
+                        .disabled(!appModel.canDiscoverCandidateFiles)
+
+                        Button("Run") {
+                            appModel.runIteration()
+                        }
+                        .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
+                        .disabled(!appModel.canRunIteration)
+                    }
+                    .frame(width: 132)
+                }
+
+                HStack(spacing: 10) {
+                    consoleBadge(appModel.hasProjectRoot ? "PROJECT ONLINE" : "PROJECT REQUIRED", tint: appModel.hasProjectRoot ? theme.cyan : theme.gold)
+                    consoleBadge(iteration.task.isReadyForExecution ? "TASK READY" : "TASK INCOMPLETE", tint: iteration.task.isReadyForExecution ? theme.cyan : theme.gold)
+                    consoleBadge("\(iteration.candidateFiles.count) CANDIDATES", tint: theme.cyanMuted)
+                    consoleBadge("\(appModel.selectedFileCount) IN SCOPE", tint: theme.cyanMuted)
+                }
             }
         }
     }
 
     private func signalPanel(signal: [SignalItem]) -> some View {
-        panel(title: "Selected Signal", systemImage: "dot.scope") {
+        consolePanel(title: "Signal", symbol: "scope") {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(signal) { item in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.kind.rawValue.uppercased())
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        Text(item.title)
+                if signal.isEmpty {
+                    consoleEmpty("Signal will appear after discovery and refresh.")
+                } else {
+                    ForEach(signal) { item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.kind.rawValue.uppercased())
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(theme.cyan)
+                            Text(item.title)
+                                .font(.system(size: 13))
+                                .foregroundStyle(theme.primaryText)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(theme.raisedBackground)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.primary.opacity(0.04))
-                    .clipShape(.rect(cornerRadius: 12))
                 }
             }
         }
+        .frame(maxWidth: .infinity)
     }
 
-    private func scopePanel(scope: ScopeSnapshot) -> some View {
-        panel(title: "Active Scope", systemImage: "square.stack.3d.up") {
+    private func scopePanel(iteration: IterationState) -> some View {
+        consolePanel(title: "Execution Scope", symbol: "square.stack.3d.up") {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Surfaces In Play")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    ForEach(scope.surfaces) { surface in
-                        Label(surface.rawValue, systemImage: "checkmark.circle")
-                    }
+                    sectionLabel("Project Root")
+                    scopeRow(appModel.projectRootPath, symbol: "folder")
                 }
-
-                Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Files In Scope")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    ForEach(scope.files, id: \.self) { file in
-                        Text(file)
-                            .font(.system(.body, design: .monospaced))
+                    sectionLabel("Candidate Files")
+                    if iteration.candidateFiles.isEmpty {
+                        consoleEmpty("Discover files to populate scope.")
+                    } else {
+                        ForEach(iteration.candidateFiles) { candidate in
+                            Toggle(isOn: Binding(
+                                get: { candidate.isSelected },
+                                set: { appModel.setCandidateFileSelection(id: candidate.id, isSelected: $0) }
+                            )) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(candidate.path)
+                                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                            .foregroundStyle(theme.primaryText)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                        Spacer()
+                                        Text("S\(candidate.score)")
+                                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(candidate.isSelected ? theme.cyan : theme.secondaryText)
+                                    }
+                                    Text(candidate.reason)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(theme.secondaryText)
+                                        .lineLimit(2)
+                                }
+                            }
+                            .toggleStyle(.checkbox)
+                            .padding(12)
+                            .background(candidate.isSelected ? theme.selectionBackground : theme.raisedBackground)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(candidate.isSelected ? theme.cyan.opacity(0.65) : theme.border, lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
                     }
                 }
             }
         }
+        .frame(maxWidth: .infinity)
     }
 
-    private func executionPanel(execution: ExecutionSummary) -> some View {
-        panel(title: "Execution Result", systemImage: "bolt.horizontal") {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(execution.headline)
-                    .font(.title3.weight(.semibold))
-                Text(execution.detail)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
+    private func outputPanel(iteration: IterationState) -> some View {
+        consolePanel(title: "Output", symbol: "waveform.path.ecg") {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 16) {
+                    outputBlock(
+                        title: "Execution",
+                        body: iteration.execution.headline,
+                        detail: iteration.execution.detail,
+                        tint: theme.cyan
+                    )
+                    outputBlock(
+                        title: "Persistence",
+                        body: appModel.persistenceStatus,
+                        detail: appModel.projectFilePath,
+                        tint: theme.gold
+                    )
+                }
 
-    private func savedStatePanel(savedState: SavedIterationState, carryForwardSummary: String) -> some View {
-        panel(title: "Saved Next Iteration State", systemImage: "tray.full") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(savedState.summary)
-                    .foregroundStyle(.secondary)
-                Text(carryForwardSummary)
-                    .font(.subheadline.weight(.medium))
-
-                Divider()
-
-                ForEach(savedState.carriedForwardItems, id: \.self) { item in
-                    Label(item.capitalized, systemImage: "arrowshape.turn.up.right")
+                HStack(alignment: .top, spacing: 16) {
+                    outputBlock(
+                        title: "Selected Scope",
+                        body: iteration.scope.files.isEmpty ? "No files selected" : iteration.scope.files.joined(separator: "\n"),
+                        detail: iteration.carryForwardSummary,
+                        tint: theme.cyanMuted,
+                        monospaced: true
+                    )
+                    outputBlock(
+                        title: "Next Iteration",
+                        body: iteration.savedState.summary,
+                        detail: iteration.savedState.carriedForwardItems.joined(separator: " • "),
+                        tint: theme.gold
+                    )
                 }
             }
         }
     }
 
-    private func panel<Content: View>(title: String, systemImage: String, @ViewBuilder content: () -> Content) -> some View {
+    private func consolePanel<Content: View>(title: String, symbol: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
+            HStack {
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.cyan)
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(theme.primaryText)
+                Spacer()
+            }
             content()
         }
         .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
-        .background(Color.primary.opacity(0.035))
-        .clipShape(.rect(cornerRadius: 18))
+        .background(theme.panelBackground)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(theme.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: theme.shadow, radius: 14, x: 0, y: 6)
     }
 
-    private func statusBadge(title: String, tint: Color) -> some View {
+    private func sidebarSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(theme.gold)
+            content()
+        }
+    }
+
+    private func sidebarValue(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(theme.secondaryText)
+            Text(value)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(theme.primaryText)
+                .lineLimit(2)
+        }
+    }
+
+    private func outputBlock(title: String, body: String, detail: String, tint: Color, monospaced: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(tint)
+            Text(body)
+                .font(monospaced ? .system(size: 12, design: .monospaced) : .system(size: 13, weight: .medium))
+                .foregroundStyle(theme.primaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(detail)
+                .font(.system(size: 12))
+                .foregroundStyle(theme.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(theme.raisedBackground)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(theme.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func consoleEmpty(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(theme.secondaryText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(theme.raisedBackground)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func scopeRow(_ value: String, symbol: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 12))
+                .foregroundStyle(theme.gold)
+            Text(value)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(theme.primaryText)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(theme.raisedBackground)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundStyle(theme.gold)
+    }
+
+    private func consoleBadge(_ title: String, tint: Color) -> some View {
         Text(title)
-            .font(.subheadline.weight(.medium))
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundStyle(tint)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(tint.opacity(0.12))
-            .foregroundStyle(tint)
-            .clipShape(.capsule)
+            .overlay(RoundedRectangle(cornerRadius: 999).stroke(tint.opacity(0.35), lineWidth: 1))
+            .clipShape(Capsule())
+    }
+
+    private func handleProjectImport(_ result: Result<[URL], any Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            appModel.importProjectRoot(from: url)
+        case .failure(let error):
+            appModel.persistenceStatus = "Failed to open project folder: \(error.localizedDescription)"
+        }
+    }
+
+    private var theme: ConsoleTheme {
+        ConsoleTheme()
+    }
+
+    private func glowingInputShell<Content: View>(title: String, isFocused: Bool, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(theme.cyan)
+
+            content()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(isFocused ? theme.focusedInputBackground : theme.inputBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(isFocused ? theme.cyan.opacity(0.9) : theme.cyan.opacity(0.45), lineWidth: 1)
+                )
+                .shadow(color: theme.cyan.opacity(isFocused ? 0.28 : 0.16), radius: isFocused ? 16 : 10, x: 0, y: 0)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func nsColor(_ color: Color) -> NSColor {
+        NSColor(color)
     }
 }
 
 #Preview {
     ContentView()
-        .environment(NangaAppModel())
+        .frame(width: 1440, height: 920)
+        .environment(
+            NangaAppModel(
+                projectStore: ProjectStore(
+                    baseDirectoryURL: URL.temporaryDirectory.appending(path: "NangaPreview", directoryHint: .isDirectory)
+                )
+            )
+        )
+}
+
+private struct ConsoleTheme {
+    let baseBackground = Color(red: 0.03, green: 0.05, blue: 0.09)
+    let sidebarBackground = Color(red: 0.04, green: 0.06, blue: 0.10)
+    let panelBackground = Color(red: 0.05, green: 0.08, blue: 0.13)
+    let raisedBackground = Color(red: 0.07, green: 0.10, blue: 0.16)
+    let inputBackground = Color(red: 0.04, green: 0.07, blue: 0.12)
+    let focusedInputBackground = Color(red: 0.05, green: 0.10, blue: 0.17)
+    let selectionBackground = Color(red: 0.05, green: 0.14, blue: 0.18)
+    let border = Color(red: 0.16, green: 0.22, blue: 0.30)
+    let primaryText = Color(red: 0.86, green: 0.92, blue: 0.97)
+    let secondaryText = Color(red: 0.54, green: 0.63, blue: 0.72)
+    let placeholderText = Color(red: 0.36, green: 0.49, blue: 0.60)
+    let cyan = Color(red: 0.34, green: 0.93, blue: 1.0)
+    let cyanMuted = Color(red: 0.23, green: 0.68, blue: 0.78)
+    let gold = Color(red: 0.82, green: 0.72, blue: 0.45)
+    let shadow = Color(red: 0.0, green: 0.9, blue: 1.0).opacity(0.08)
+}
+
+private struct ConsoleButtonStyle: ButtonStyle {
+    let tint: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(tint.opacity(configuration.isPressed ? 0.22 : 0.14))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(tint.opacity(0.45), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .shadow(color: tint.opacity(configuration.isPressed ? 0.0 : 0.14), radius: 8, x: 0, y: 0)
+    }
 }
