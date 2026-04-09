@@ -62,6 +62,26 @@ The repo should help people understand:
 - how refresh should work after execution
 - how useful iteration state can be preserved without keeping stale context
 
+## What To Borrow, What To Avoid
+
+Nanga can learn useful lessons from agent frameworks such as `Swarm`, but it should stay narrower and more product-driven.
+
+What to borrow:
+
+- a structured workspace contract for instructions, skills, memory, and iteration artifacts
+- validation before execution so malformed state is caught early
+- resumable iteration state instead of fragile one-shot runs
+- deterministic scenario testing for run, refresh, carry-forward, and resume behavior
+- Swift-native runtime discipline
+
+What to avoid:
+
+- turning Nanga into a broad orchestration framework
+- adding workflow modes and provider abstractions before the core app loop is excellent
+- expanding memory and agent features faster than the product can make them legible
+
+Nanga should borrow runtime rigor, not framework sprawl.
+
 ## What People Pay For
 
 The paid macOS app should be the best way to actually use Nanga.
