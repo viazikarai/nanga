@@ -84,22 +84,33 @@ struct ContentView: View {
 
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("NANGA")
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundStyle(theme.cyan)
-                            .opacity(selectionHeroVisible ? 1 : 0)
-                            .offset(y: selectionHeroVisible ? 0 : 8)
+                        HStack(spacing: 8) {
+                            AnchorMark()
+                                .stroke(theme.anchorMetal, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+                                .frame(width: 14, height: 16)
+                            Text("NANGA")
+                                .font(.system(size: 12, weight: .semibold))
+                                .tracking(2.4)
+                                .foregroundStyle(theme.cyan)
+                        }
+                        .opacity(selectionHeroVisible ? 1 : 0)
+                        .offset(y: selectionHeroVisible ? 0 : 8)
                         Text("Nanga your trusted anchor")
-                            .font(.system(size: 38, weight: .black))
+                            .font(.system(size: 40, weight: .bold, design: .serif))
+                            .tracking(-0.8)
                             .foregroundStyle(theme.primaryText)
                             .opacity(selectionHeroVisible ? 1 : 0)
                             .offset(y: selectionHeroVisible ? 0 : 14)
-                        Text("Pick one agent. Lock in. Then work inside that agent only.")
+                        Text("Select a workspace first. Then choose the agent Nanga should anchor to that folder.")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(theme.secondaryText)
                             .opacity(selectionHeroVisible ? 1 : 0)
                             .offset(y: selectionHeroVisible ? 0 : 18)
                     }
+
+                    landingFolderControl
+                        .opacity(selectionHeroVisible ? 1 : 0)
+                        .offset(y: selectionHeroVisible ? 0 : 18)
 
                     HStack(alignment: .top, spacing: 18) {
                         ForEach(Array(appModel.agentConnections.enumerated()), id: \.element.id) { index, connection in
@@ -116,7 +127,7 @@ struct ContentView: View {
 
                     Text("SELECT YOUR AGENT")
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundStyle(theme.secondaryText)
+                        .foregroundStyle(appModel.hasProjectRoot ? theme.secondaryText : theme.placeholderText)
                         .opacity(selectionHeroVisible ? 1 : 0)
                         .offset(y: selectionHeroVisible ? 0 : 12)
                 }
@@ -179,6 +190,9 @@ struct ContentView: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
+                        AnchorMark()
+                            .stroke(theme.anchorMetal, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                            .frame(width: 12, height: 14)
                         Text(agent.runtimeName.uppercased())
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .foregroundStyle(theme.cyanGlow)
@@ -186,7 +200,7 @@ struct ContentView: View {
                     }
 
                     Text("Nanga your trusted anchor")
-                        .font(.system(size: 26, weight: .black))
+                        .font(.system(size: 28, weight: .bold, design: .serif))
                         .foregroundStyle(theme.primaryText)
 
                     Text("Anchor the task. Preserve the signal. Hand off only what matters.")
@@ -221,7 +235,7 @@ struct ContentView: View {
             }
 
             HStack(spacing: 10) {
-                consoleBadge(project.name.uppercased(), tint: theme.cyanMuted)
+                consoleBadge(project.name.uppercased(), tint: theme.gold)
                 consoleBadge(agent.runtimeName.uppercased(), tint: theme.cyan)
                 consoleBadge(agent.status.label.uppercased(), tint: agent.statusTint(in: theme))
             }
@@ -231,7 +245,7 @@ struct ContentView: View {
         .background(theme.sidebarBackground)
         .overlay(alignment: .bottomLeading) {
             Rectangle()
-                .fill(theme.cyanGlow.opacity(0.45))
+                .fill(theme.gold.opacity(0.70))
                 .frame(width: 96, height: 1)
                 .padding(.leading, 24)
         }
@@ -284,7 +298,7 @@ struct ContentView: View {
                         Button("Open Folder") {
                             isImportingProjectRoot = true
                         }
-                        .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
+                        .buttonStyle(ConsoleButtonStyle(tint: theme.gold))
 
                         Button("Discover") {
                             appModel.discoverCandidateFiles()
@@ -407,7 +421,7 @@ struct ContentView: View {
                         title: "Persistence",
                         body: appModel.persistenceStatus,
                         detail: appModel.projectFilePath,
-                        tint: theme.cyanMuted
+                        tint: theme.gold
                     )
                 }
 
@@ -461,7 +475,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(theme.cyanMuted)
+                .foregroundStyle(theme.gold)
             content()
         }
     }
@@ -510,7 +524,7 @@ struct ContentView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(connection.runtimeName)
-                        .font(.system(size: 22, weight: .black))
+                        .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(theme.primaryText)
 
                     Text(agentButtonSubtitle(for: connection))
@@ -537,8 +551,8 @@ struct ContentView: View {
             .shadow(color: theme.agentButtonShadow(connection: connection), radius: 16, x: 0, y: 10)
         }
         .buttonStyle(.plain)
-        .disabled(!connection.canExecute)
-        .opacity(connection.canExecute ? 1 : 0.78)
+        .disabled(!appModel.hasProjectRoot || !connection.canExecute)
+        .opacity((appModel.hasProjectRoot && connection.canExecute) ? 1 : 0.72)
         .offset(y: selectionCloudDrift ? -4 : 4)
         .animation(
             .easeInOut(duration: 3.2).repeatForever(autoreverses: true),
@@ -547,13 +561,17 @@ struct ContentView: View {
     }
 
     private func agentButtonSubtitle(for connection: AgentConnection) -> String {
+        guard appModel.hasProjectRoot else {
+            return "Select a folder to unlock agent routing."
+        }
+
         switch connection.status {
         case .connected:
-            "Ready in this workspace."
+            return "Ready in this workspace."
         case .available:
-            "Installed and ready to attach."
+            return "Installed and ready to attach."
         case .unavailable:
-            "Not installed on this machine."
+            return "Not installed on this machine."
         }
     }
 
@@ -588,6 +606,39 @@ struct ContentView: View {
             }
         }
         .shadow(color: theme.agentButtonShadow(connection: connection), radius: 10, x: 0, y: 4)
+    }
+
+    private var landingFolderControl: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("WORKSPACE")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1.8)
+                .foregroundStyle(theme.gold)
+
+            HStack(alignment: .center, spacing: 14) {
+                Button(appModel.hasProjectRoot ? "Change Folder" : "Select Folder") {
+                    isImportingProjectRoot = true
+                }
+                .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
+                .frame(width: 148)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appModel.hasProjectRoot ? "Approved Folder" : "No Folder Selected")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.primaryText)
+
+                    Text(appModel.projectRootPath)
+                        .font(.system(size: 12))
+                        .foregroundStyle(appModel.hasProjectRoot ? theme.secondaryText : theme.placeholderText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .padding(16)
+            .background(theme.raisedBackground)
+            .overlay(HUDFrameShape(cut: 14).stroke(theme.border, lineWidth: 1))
+            .clipShape(HUDFrameShape(cut: 14))
+        }
     }
 
     private func outputBlock(title: String, body: String, detail: String, tint: Color, monospaced: Bool = false) -> some View {
@@ -643,7 +694,7 @@ struct ContentView: View {
     private func sectionLabel(_ text: String) -> some View {
         Text(text.uppercased())
             .font(.system(size: 11, weight: .bold, design: .monospaced))
-            .foregroundStyle(theme.cyanMuted)
+            .foregroundStyle(theme.gold)
     }
 
     private func consoleBadge(_ title: String, tint: Color) -> some View {
@@ -695,7 +746,7 @@ struct ContentView: View {
                 .offset(x: selectionBackgroundPulse ? -280 : -220, y: selectionBackgroundPulse ? -220 : -170)
 
             Circle()
-                .fill(theme.cyanMuted.opacity(activeColorScheme == .dark ? 0.10 : 0.06))
+                .fill(theme.gold.opacity(activeColorScheme == .dark ? 0.08 : 0.05))
                 .frame(width: 320, height: 320)
                 .blur(radius: 32)
                 .offset(x: selectionBackgroundPulse ? 310 : 250, y: selectionBackgroundPulse ? 200 : 150)
@@ -794,6 +845,7 @@ private struct ConsoleTheme {
     let cyanGlow: Color
     let cyanMuted: Color
     let gold: Color
+    let anchorMetal: Color
     let shadow: Color
     let heroPanelBackground: Color
     let heroPanelStroke: Color
@@ -802,47 +854,48 @@ private struct ConsoleTheme {
 
     init(colorScheme: ColorScheme) {
         isDarkMode = colorScheme == .dark
-        cyan = Color(red: 0.09, green: 0.70, blue: 0.86)
-        cyanGlow = Color(red: 0.50, green: 0.93, blue: 1.0)
-        cyanMuted = Color(red: 0.10, green: 0.42, blue: 0.56)
-        gold = Color(red: 0.34, green: 0.76, blue: 0.92)
+        cyan = Color(red: 0.00, green: 0.76, blue: 0.82)
+        cyanGlow = Color(red: 0.00, green: 0.88, blue: 1.00)
+        cyanMuted = Color(red: 0.13, green: 0.58, blue: 0.68)
+        gold = Color(red: 0.88, green: 0.77, blue: 0.42)
+        anchorMetal = Color(red: 0.76, green: 0.55, blue: 0.31)
 
         if colorScheme == .dark {
-            baseBackground = Color(red: 0.02, green: 0.03, blue: 0.06)
-            sidebarBackground = Color(red: 0.03, green: 0.05, blue: 0.08)
-            panelBackground = Color(red: 0.04, green: 0.06, blue: 0.10)
-            raisedBackground = Color(red: 0.06, green: 0.09, blue: 0.14)
-            agentPanelBackground = Color(red: 0.04, green: 0.08, blue: 0.12)
-            inputBackground = Color(red: 0.03, green: 0.06, blue: 0.10)
-            focusedInputBackground = Color(red: 0.05, green: 0.11, blue: 0.17)
-            selectionBackground = Color(red: 0.05, green: 0.15, blue: 0.20)
-            border = Color(red: 0.18, green: 0.28, blue: 0.38)
-            primaryText = Color(red: 0.90, green: 0.95, blue: 0.98)
-            secondaryText = Color(red: 0.52, green: 0.62, blue: 0.72)
-            placeholderText = Color(red: 0.33, green: 0.46, blue: 0.57)
-            shadow = Color(red: 0.08, green: 0.82, blue: 1.0).opacity(0.12)
-            heroPanelBackground = Color(red: 0.04, green: 0.07, blue: 0.11).opacity(0.94)
-            heroPanelStroke = cyanGlow.opacity(0.34)
-            heroShadow = cyanGlow.opacity(0.14)
-            gridLine = cyan.opacity(0.28)
+            baseBackground = Color(red: 0.043, green: 0.122, blue: 0.227)
+            sidebarBackground = Color(red: 0.055, green: 0.145, blue: 0.262)
+            panelBackground = Color(red: 0.067, green: 0.160, blue: 0.286)
+            raisedBackground = Color(red: 0.082, green: 0.185, blue: 0.321)
+            agentPanelBackground = Color(red: 0.060, green: 0.152, blue: 0.274)
+            inputBackground = Color(red: 0.055, green: 0.145, blue: 0.258)
+            focusedInputBackground = Color(red: 0.070, green: 0.188, blue: 0.325)
+            selectionBackground = Color(red: 0.040, green: 0.220, blue: 0.320)
+            border = gold.opacity(0.38)
+            primaryText = Color(red: 0.92, green: 0.96, blue: 0.98)
+            secondaryText = Color(red: 0.66, green: 0.75, blue: 0.82)
+            placeholderText = Color(red: 0.45, green: 0.58, blue: 0.66)
+            shadow = cyanGlow.opacity(0.14)
+            heroPanelBackground = Color(red: 0.050, green: 0.140, blue: 0.250).opacity(0.95)
+            heroPanelStroke = gold.opacity(0.42)
+            heroShadow = cyanGlow.opacity(0.16)
+            gridLine = cyan.opacity(0.24)
         } else {
-            baseBackground = Color(red: 0.95, green: 0.97, blue: 0.99)
-            sidebarBackground = Color(red: 0.92, green: 0.95, blue: 0.98)
-            panelBackground = Color(red: 0.98, green: 0.99, blue: 1.0)
-            raisedBackground = Color(red: 0.95, green: 0.97, blue: 0.99)
-            agentPanelBackground = Color(red: 0.90, green: 0.96, blue: 0.99)
-            inputBackground = Color(red: 0.97, green: 0.98, blue: 1.0)
-            focusedInputBackground = Color(red: 0.90, green: 0.96, blue: 0.99)
-            selectionBackground = Color(red: 0.85, green: 0.94, blue: 0.97)
-            border = Color(red: 0.79, green: 0.85, blue: 0.90)
-            primaryText = Color(red: 0.11, green: 0.16, blue: 0.22)
-            secondaryText = Color(red: 0.35, green: 0.44, blue: 0.52)
-            placeholderText = Color(red: 0.50, green: 0.58, blue: 0.64)
-            shadow = Color(red: 0.0, green: 0.22, blue: 0.36).opacity(0.06)
-            heroPanelBackground = Color(red: 0.98, green: 0.99, blue: 1.0).opacity(0.96)
-            heroPanelStroke = cyan.opacity(0.24)
-            heroShadow = Color(red: 0.10, green: 0.36, blue: 0.54).opacity(0.08)
-            gridLine = cyan.opacity(0.18)
+            baseBackground = Color(red: 0.92, green: 0.97, blue: 0.99)
+            sidebarBackground = Color(red: 0.88, green: 0.95, blue: 0.98)
+            panelBackground = Color(red: 0.95, green: 0.99, blue: 1.00)
+            raisedBackground = Color(red: 0.90, green: 0.96, blue: 0.99)
+            agentPanelBackground = Color(red: 0.86, green: 0.95, blue: 0.99)
+            inputBackground = Color(red: 0.94, green: 0.98, blue: 1.00)
+            focusedInputBackground = Color(red: 0.86, green: 0.95, blue: 0.99)
+            selectionBackground = Color(red: 0.80, green: 0.93, blue: 0.97)
+            border = gold.opacity(0.42)
+            primaryText = Color(red: 0.07, green: 0.18, blue: 0.30)
+            secondaryText = Color(red: 0.28, green: 0.42, blue: 0.54)
+            placeholderText = Color(red: 0.42, green: 0.55, blue: 0.62)
+            shadow = Color(red: 0.00, green: 0.55, blue: 0.75).opacity(0.08)
+            heroPanelBackground = Color(red: 0.95, green: 0.99, blue: 1.00).opacity(0.97)
+            heroPanelStroke = gold.opacity(0.36)
+            heroShadow = Color(red: 0.00, green: 0.72, blue: 0.88).opacity(0.10)
+            gridLine = cyan.opacity(0.16)
         }
     }
 
@@ -884,8 +937,8 @@ private struct ConsoleTheme {
             )
         case .available:
             colorSchemeAware(
-                dark: Color(red: 0.06, green: 0.10, blue: 0.15),
-                light: Color(red: 0.92, green: 0.97, blue: 0.99)
+                dark: Color(red: 0.062, green: 0.160, blue: 0.278),
+                light: Color(red: 0.88, green: 0.96, blue: 0.99)
             )
         case .unavailable:
             raisedBackground
@@ -897,7 +950,7 @@ private struct ConsoleTheme {
         case .connected:
             cyanGlow.opacity(0.42)
         case .available:
-            cyanMuted.opacity(0.34)
+            gold.opacity(0.32)
         case .unavailable:
             border
         }
@@ -908,7 +961,7 @@ private struct ConsoleTheme {
         case .connected:
             cyanGlow.opacity(0.16)
         case .available:
-            cyan.opacity(0.08)
+            gold.opacity(0.08)
         case .unavailable:
             shadow
         }
@@ -923,8 +976,8 @@ private struct ConsoleTheme {
             )
         case .available:
             colorSchemeAware(
-                dark: Color(red: 0.05, green: 0.10, blue: 0.15),
-                light: Color(red: 0.89, green: 0.96, blue: 0.99)
+                dark: Color(red: 0.055, green: 0.152, blue: 0.260),
+                light: Color(red: 0.86, green: 0.94, blue: 0.98)
             )
         case .unavailable:
             raisedBackground
@@ -936,7 +989,7 @@ private struct ConsoleTheme {
         case .connected:
             cyan.opacity(0.42)
         case .available:
-            cyanMuted.opacity(0.34)
+            gold.opacity(0.34)
         case .unavailable:
             border
         }
@@ -947,7 +1000,7 @@ private struct ConsoleTheme {
         case .connected:
             cyanGlow.opacity(0.55)
         case .available:
-            cyanMuted.opacity(0.42)
+            gold.opacity(0.42)
         case .unavailable:
             border
         }
@@ -958,7 +1011,7 @@ private struct ConsoleTheme {
         case .connected:
             cyanGlow.opacity(0.18)
         case .available:
-            cyan.opacity(0.10)
+            gold.opacity(0.10)
         case .unavailable:
             shadow
         }
@@ -1025,6 +1078,35 @@ private struct GridPattern: Shape {
             path.addLine(to: CGPoint(x: rect.maxX, y: y))
             y += spacing
         }
+
+        return path
+    }
+}
+
+private struct AnchorMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let midX = rect.midX
+        let topY = rect.minY + rect.height * 0.10
+        let ringRadius = rect.width * 0.14
+        let shankTop = topY + ringRadius * 2 + rect.height * 0.04
+        let shankBottom = rect.maxY - rect.height * 0.26
+        let armY = rect.midY
+        let armLeft = rect.minX + rect.width * 0.18
+        let armRight = rect.maxX - rect.width * 0.18
+        let flukeY = rect.maxY - rect.height * 0.12
+
+        path.addEllipse(in: CGRect(x: midX - ringRadius, y: topY, width: ringRadius * 2, height: ringRadius * 2))
+        path.move(to: CGPoint(x: midX, y: shankTop))
+        path.addLine(to: CGPoint(x: midX, y: shankBottom))
+        path.move(to: CGPoint(x: armLeft, y: armY))
+        path.addLine(to: CGPoint(x: armRight, y: armY))
+        path.move(to: CGPoint(x: armLeft, y: armY))
+        path.addQuadCurve(to: CGPoint(x: rect.minX + rect.width * 0.12, y: flukeY), control: CGPoint(x: rect.minX + rect.width * 0.10, y: armY + rect.height * 0.18))
+        path.move(to: CGPoint(x: armRight, y: armY))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX - rect.width * 0.12, y: flukeY), control: CGPoint(x: rect.maxX - rect.width * 0.10, y: armY + rect.height * 0.18))
+        path.move(to: CGPoint(x: rect.minX + rect.width * 0.24, y: shankBottom))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX - rect.width * 0.24, y: shankBottom), control: CGPoint(x: midX, y: rect.maxY))
 
         return path
     }
