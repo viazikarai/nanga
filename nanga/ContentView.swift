@@ -91,7 +91,7 @@ struct ContentView: View {
                     }
                 }
 
-                HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Appearance".uppercased())
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(theme.gold)
@@ -102,6 +102,7 @@ struct ContentView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
 
                 sidebarSection("Current Task") {
