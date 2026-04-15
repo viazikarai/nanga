@@ -57,8 +57,14 @@ final class NangaAppModel {
     var currentIteration: IterationState {
         get { selectedProject.currentIteration }
         set {
-            selectedProject.currentIteration = newValue
-            syncScopeFromSelections()
+            var iteration = newValue
+            iteration.scope.files = iteration.candidateFiles
+                .filter(\.isSelected)
+                .map(\.path)
+
+            mutateProject { project in
+                project.currentIteration = iteration
+            }
             persistProject()
         }
     }
@@ -66,7 +72,10 @@ final class NangaAppModel {
     var currentTaskTitle: String {
         get { currentIteration.task.title }
         set {
-            selectedProject.currentIteration.task.title = newValue
+            mutateCurrentIteration { iteration in
+                iteration.task.title = newValue
+            }
+            refreshTaskDrivenStateIfNeeded()
             persistProject(statusMessage: "Updated current task title.")
         }
     }
@@ -74,7 +83,10 @@ final class NangaAppModel {
     var currentTaskDetail: String {
         get { currentIteration.task.detail }
         set {
-            selectedProject.currentIteration.task.detail = newValue
+            mutateCurrentIteration { iteration in
+                iteration.task.detail = newValue
+            }
+            refreshTaskDrivenStateIfNeeded()
             persistProject(statusMessage: "Updated current task detail.")
         }
     }
@@ -119,21 +131,32 @@ final class NangaAppModel {
             snapshot: currentIteration.snapshot
         )
 
-        selectedProject.iterationHistory.insert(record, at: 0)
-        selectedProject.iterationHistory = Array(selectedProject.iterationHistory.prefix(20))
+        mutateProject { project in
+            project.iterationHistory.insert(record, at: 0)
+            project.iterationHistory = Array(project.iterationHistory.prefix(20))
+        }
         persistProject(statusMessage: "Saved iteration checkpoint to history.")
+    }
+
+    func deleteIterationCheckpoint(id: UUID) {
+        mutateProject { project in
+            project.iterationHistory.removeAll { $0.id == id }
+        }
+        persistProject(statusMessage: "Deleted iteration checkpoint.")
     }
 
     func importProjectRoot(from url: URL) {
         stopAccessingCurrentProjectRootIfNeeded()
 
         let folderReference = ProjectFolderReference.make(from: url)
-        selectedProject.rootFolder = folderReference
-        selectedProject.name = url.lastPathComponent
-        selectedProject.repositoryName = url.lastPathComponent
+        mutateProject { project in
+            project.rootFolder = folderReference
+            project.name = url.lastPathComponent
+            project.repositoryName = url.lastPathComponent
 
-        if !selectedProject.currentIteration.scope.folders.contains(folderReference.path) {
-            selectedProject.currentIteration.scope.folders.insert(folderReference.path, at: 0)
+            if !project.currentIteration.scope.folders.contains(folderReference.path) {
+                project.currentIteration.scope.folders.insert(folderReference.path, at: 0)
+            }
         }
 
         let bookmarkMessage = folderReference.bookmarkData == nil
@@ -163,8 +186,9 @@ final class NangaAppModel {
                 previousSelections: currentIteration.scope.files
             )
 
-            selectedProject.currentIteration.candidateFiles = candidates
-            syncScopeFromSelections()
+            mutateCurrentIteration { iteration in
+                iteration.candidateFiles = candidates
+            }
             refreshSignalFromCurrentState(
                 headline: "Candidate files discovered",
                 detail: "Nanga proposed files based on the task and project root."
@@ -176,12 +200,13 @@ final class NangaAppModel {
     }
 
     func setCandidateFileSelection(id: UUID, isSelected: Bool) {
-        guard let index = selectedProject.currentIteration.candidateFiles.firstIndex(where: { $0.id == id }) else {
+        guard let index = currentIteration.candidateFiles.firstIndex(where: { $0.id == id }) else {
             return
         }
 
-        selectedProject.currentIteration.candidateFiles[index].isSelected = isSelected
-        syncScopeFromSelections()
+        mutateCurrentIteration { iteration in
+            iteration.candidateFiles[index].isSelected = isSelected
+        }
         refreshSignalFromCurrentState(
             headline: "Scope adjusted",
             detail: "Selected files were updated for the current iteration."
@@ -200,11 +225,13 @@ final class NangaAppModel {
             return
         }
 
-        selectedProject.currentIteration.execution = ExecutionSummary(
-            status: .running,
-            headline: "Running scoped iteration",
-            detail: "Compacting task, signal, and scoped files into an execution package."
-        )
+        mutateCurrentIteration { iteration in
+            iteration.execution = ExecutionSummary(
+                status: .running,
+                headline: "Running scoped iteration",
+                detail: "Compacting task, signal, and scoped files into an execution package."
+            )
+        }
         persistProject(statusMessage: "Preparing scoped execution package.")
 
         do {
@@ -221,11 +248,13 @@ final class NangaAppModel {
             saveIterationCheckpoint()
             persistProject(statusMessage: "Built the scoped execution package and ran it through the active runtime.")
         } catch {
-            selectedProject.currentIteration.execution = ExecutionSummary(
-                status: .failed,
-                headline: "Execution failed",
-                detail: error.localizedDescription
-            )
+                mutateCurrentIteration { iteration in
+                    iteration.execution = ExecutionSummary(
+                        status: .failed,
+                        headline: "Execution failed",
+                        detail: error.localizedDescription
+                    )
+                }
             persistProject(statusMessage: "Failed to run the scoped iteration: \(error.localizedDescription)")
         }
     }
@@ -262,31 +291,51 @@ final class NangaAppModel {
             refreshedSignal.append(SignalItem(kind: .unfinishedWork, title: "Candidate file left out of scope: \(firstUnselected.path)"))
         }
 
-        selectedProject.currentIteration.signal = refreshedSignal
-        selectedProject.currentIteration.execution = ExecutionSummary(
-            status: .refreshed,
-            headline: headline,
-            detail: detail
-        )
+        mutateCurrentIteration { iteration in
+            iteration.signal = refreshedSignal
+            iteration.execution = ExecutionSummary(
+                status: .refreshed,
+                headline: headline,
+                detail: detail
+            )
+        }
     }
 
     private func applyExecutionResult(_ result: ExecutionResult, package: ExecutionPackage) {
-        selectedProject.currentIteration.signal = result.refreshedSignal
-        selectedProject.currentIteration.savedState = SavedIterationState(
-            summary: "Saved a compact execution package and refreshed carry-forward state for the next iteration.",
-            carriedForwardItems: result.carriedForwardItems
-        )
-        selectedProject.currentIteration.execution = ExecutionSummary(
-            status: .refreshed,
-            headline: result.headline,
-            detail: "\(result.detail) Scoped package: \(package.fileCount) files, \(package.signal.count) signal items."
-        )
+        mutateCurrentIteration { iteration in
+            iteration.signal = result.refreshedSignal
+            iteration.savedState = SavedIterationState(
+                summary: "Saved a compact execution package and refreshed carry-forward state for the next iteration.",
+                carriedForwardItems: result.carriedForwardItems
+            )
+            iteration.execution = ExecutionSummary(
+                status: .refreshed,
+                headline: result.headline,
+                detail: "\(result.detail) Scoped package: \(package.fileCount) files, \(package.signal.count) signal items."
+            )
+        }
     }
 
-    private func syncScopeFromSelections() {
-        selectedProject.currentIteration.scope.files = selectedProject.currentIteration.candidateFiles
+    private func refreshTaskDrivenStateIfNeeded() {
+        guard hasProjectRoot else { return }
+        guard currentIteration.task.isReadyForExecution else { return }
+
+        discoverCandidateFiles()
+    }
+
+    private func mutateCurrentIteration(_ update: (inout IterationState) -> Void) {
+        var project = selectedProject
+        update(&project.currentIteration)
+        project.currentIteration.scope.files = project.currentIteration.candidateFiles
             .filter(\.isSelected)
             .map(\.path)
+        selectedProject = project
+    }
+
+    private func mutateProject(_ update: (inout NangaProject) -> Void) {
+        var project = selectedProject
+        update(&project)
+        selectedProject = project
     }
 
     private func persistProject(statusMessage: String = "Saved project state to disk.") {

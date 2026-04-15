@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Environment(NangaAppModel.self) private var appModel
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isImportingProjectRoot = false
     @FocusState private var focusedInput: InputField?
 
@@ -91,14 +92,27 @@ struct ContentView: View {
                                 .foregroundStyle(theme.secondaryText)
                         } else {
                             ForEach(project.iterationHistory.prefix(6)) { record in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(record.label)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(theme.primaryText)
-                                        .lineLimit(1)
-                                    Text(record.savedAt, format: .dateTime.month().day().hour().minute())
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundStyle(theme.secondaryText)
+                                HStack(alignment: .top, spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(record.label)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(theme.primaryText)
+                                            .lineLimit(1)
+                                        Text(record.savedAt, format: .dateTime.month().day().hour().minute())
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundStyle(theme.secondaryText)
+                                    }
+
+                                    Spacer(minLength: 8)
+
+                                    Button {
+                                        appModel.deleteIterationCheckpoint(id: record.id)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 11, weight: .semibold))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(theme.secondaryText)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(10)
@@ -440,7 +454,7 @@ struct ContentView: View {
     }
 
     private var theme: ConsoleTheme {
-        ConsoleTheme()
+        ConsoleTheme(colorScheme: colorScheme)
     }
 
     private func glowingInputShell<Content: View>(title: String, isFocused: Bool, @ViewBuilder content: () -> Content) -> some View {
@@ -481,21 +495,55 @@ struct ContentView: View {
 }
 
 private struct ConsoleTheme {
-    let baseBackground = Color(red: 0.03, green: 0.05, blue: 0.09)
-    let sidebarBackground = Color(red: 0.04, green: 0.06, blue: 0.10)
-    let panelBackground = Color(red: 0.05, green: 0.08, blue: 0.13)
-    let raisedBackground = Color(red: 0.07, green: 0.10, blue: 0.16)
-    let inputBackground = Color(red: 0.04, green: 0.07, blue: 0.12)
-    let focusedInputBackground = Color(red: 0.05, green: 0.10, blue: 0.17)
-    let selectionBackground = Color(red: 0.05, green: 0.14, blue: 0.18)
-    let border = Color(red: 0.16, green: 0.22, blue: 0.30)
-    let primaryText = Color(red: 0.86, green: 0.92, blue: 0.97)
-    let secondaryText = Color(red: 0.54, green: 0.63, blue: 0.72)
-    let placeholderText = Color(red: 0.36, green: 0.49, blue: 0.60)
-    let cyan = Color(red: 0.34, green: 0.93, blue: 1.0)
-    let cyanMuted = Color(red: 0.23, green: 0.68, blue: 0.78)
-    let gold = Color(red: 0.82, green: 0.72, blue: 0.45)
-    let shadow = Color(red: 0.0, green: 0.9, blue: 1.0).opacity(0.08)
+    let baseBackground: Color
+    let sidebarBackground: Color
+    let panelBackground: Color
+    let raisedBackground: Color
+    let inputBackground: Color
+    let focusedInputBackground: Color
+    let selectionBackground: Color
+    let border: Color
+    let primaryText: Color
+    let secondaryText: Color
+    let placeholderText: Color
+    let cyan: Color
+    let cyanMuted: Color
+    let gold: Color
+    let shadow: Color
+
+    init(colorScheme: ColorScheme) {
+        cyan = Color(red: 0.0, green: 0.56, blue: 0.70)
+        cyanMuted = Color(red: 0.12, green: 0.47, blue: 0.58)
+        gold = Color(red: 0.71, green: 0.50, blue: 0.16)
+
+        if colorScheme == .dark {
+            baseBackground = Color(red: 0.03, green: 0.05, blue: 0.09)
+            sidebarBackground = Color(red: 0.04, green: 0.06, blue: 0.10)
+            panelBackground = Color(red: 0.05, green: 0.08, blue: 0.13)
+            raisedBackground = Color(red: 0.07, green: 0.10, blue: 0.16)
+            inputBackground = Color(red: 0.04, green: 0.07, blue: 0.12)
+            focusedInputBackground = Color(red: 0.05, green: 0.10, blue: 0.17)
+            selectionBackground = Color(red: 0.05, green: 0.14, blue: 0.18)
+            border = Color(red: 0.16, green: 0.22, blue: 0.30)
+            primaryText = Color(red: 0.86, green: 0.92, blue: 0.97)
+            secondaryText = Color(red: 0.54, green: 0.63, blue: 0.72)
+            placeholderText = Color(red: 0.36, green: 0.49, blue: 0.60)
+            shadow = Color(red: 0.0, green: 0.9, blue: 1.0).opacity(0.08)
+        } else {
+            baseBackground = Color(red: 0.95, green: 0.97, blue: 0.99)
+            sidebarBackground = Color(red: 0.92, green: 0.95, blue: 0.98)
+            panelBackground = Color(red: 0.98, green: 0.99, blue: 1.0)
+            raisedBackground = Color(red: 0.95, green: 0.97, blue: 0.99)
+            inputBackground = Color(red: 0.97, green: 0.98, blue: 1.0)
+            focusedInputBackground = Color(red: 0.90, green: 0.96, blue: 0.99)
+            selectionBackground = Color(red: 0.85, green: 0.94, blue: 0.97)
+            border = Color(red: 0.79, green: 0.85, blue: 0.90)
+            primaryText = Color(red: 0.11, green: 0.16, blue: 0.22)
+            secondaryText = Color(red: 0.35, green: 0.44, blue: 0.52)
+            placeholderText = Color(red: 0.50, green: 0.58, blue: 0.64)
+            shadow = Color(red: 0.0, green: 0.22, blue: 0.36).opacity(0.06)
+        }
+    }
 }
 
 private struct ConsoleButtonStyle: ButtonStyle {
