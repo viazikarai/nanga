@@ -196,7 +196,7 @@ struct ContentView: View {
                         Text(agent.runtimeName.uppercased())
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .foregroundStyle(theme.cyanGlow)
-                        consoleBadge("CONNECTED", tint: theme.cyanGlow)
+                        consoleBadge(agentStateTitle(for: agent), tint: agent.statusTint(in: theme))
                     }
 
                     Text("Nanga your trusted anchor")
@@ -205,6 +205,11 @@ struct ContentView: View {
 
                     Text("Anchor the task. Preserve the signal. Hand off only what matters.")
                         .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(agent.detail)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
                         .foregroundStyle(theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -238,7 +243,11 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 consoleBadge(project.name.uppercased(), tint: theme.gold)
                 consoleBadge(agent.runtimeName.uppercased(), tint: theme.cyan)
-                consoleBadge(agent.status.label.uppercased(), tint: agent.statusTint(in: theme))
+                if let sessionID = appModel.selectedAgentSessionID {
+                    consoleBadge("THREAD \(sessionID.prefix(8))", tint: theme.cyanGlow)
+                } else {
+                    consoleBadge(agent.status.label.uppercased(), tint: agent.statusTint(in: theme))
+                }
             }
         }
         .padding(.horizontal, 24)
@@ -255,6 +264,8 @@ struct ContentView: View {
     private func topCommandSurface(iteration: IterationState) -> some View {
         consolePanel(title: "Task Input", symbol: "terminal") {
             VStack(alignment: .leading, spacing: 14) {
+                runtimeLinkStrip
+
                 HStack(alignment: .top, spacing: 14) {
                     VStack(alignment: .leading, spacing: 12) {
                         glowingInputShell(title: "Task", isFocused: focusedInput == .title) {
@@ -320,7 +331,7 @@ struct ContentView: View {
 
                 HStack(spacing: 10) {
                     if let selectedAgent = appModel.selectedAgentConnection {
-                        consoleBadge("\(selectedAgent.runtimeName.uppercased()) CONNECTED", tint: appModel.isAgentSelectionLocked ? theme.cyanGlow : theme.cyan)
+                        consoleBadge("\(selectedAgent.runtimeName.uppercased()) \(agentStateTitle(for: selectedAgent))", tint: selectedAgent.statusTint(in: theme))
                         consoleBadge(selectedAgent.status.label.uppercased(), tint: selectedAgent.statusTint(in: theme))
                     }
                     consoleBadge(appModel.hasProjectRoot ? "PROJECT ONLINE" : "PROJECT REQUIRED", tint: appModel.hasProjectRoot ? theme.cyan : theme.cyanMuted)
@@ -441,6 +452,14 @@ struct ContentView: View {
                         tint: theme.cyanMuted
                     )
                 }
+
+                outputBlock(
+                    title: "Codex Runtime",
+                    body: appModel.agentFeedText,
+                    detail: runtimeExecutionDetail,
+                    tint: theme.cyanMuted,
+                    monospaced: true
+                )
 
             }
         }
@@ -645,6 +664,61 @@ struct ContentView: View {
         }
     }
 
+    private var runtimeLinkStrip: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("AGENT LINK")
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(theme.gold)
+
+            Text(appModel.selectedAgentConnection?.detail ?? "No agent selected.")
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(theme.primaryText)
+                .textSelection(.enabled)
+
+            if let sessionID = appModel.selectedAgentSessionID {
+                Text("Thread \(sessionID)")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(theme.cyan)
+                    .textSelection(.enabled)
+            }
+
+            Text(appModel.liveAgentEvents.last?.message ?? "No live runtime events yet.")
+                .font(.system(size: 11))
+                .foregroundStyle(theme.secondaryText)
+                .lineLimit(2)
+
+            HStack(spacing: 10) {
+                Button("Link Now") {
+                    Task {
+                        await appModel.linkSelectedAgentNow()
+                    }
+                }
+                .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
+                .disabled(!appModel.isAgentSelectionLocked || !appModel.hasProjectRoot)
+
+                Button("Re-link") {
+                    Task {
+                        await appModel.relinkSelectedAgentNow()
+                    }
+                }
+                .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
+                .disabled(!appModel.isAgentSelectionLocked || !appModel.hasProjectRoot)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(theme.raisedBackground)
+        .overlay(HUDFrameShape(cut: 10).stroke(theme.border, lineWidth: 1))
+        .clipShape(HUDFrameShape(cut: 10))
+    }
+
+    private var runtimeExecutionDetail: String {
+        if let sessionID = appModel.selectedAgentSessionID {
+            return "Attached to thread \(sessionID)"
+        }
+        return appModel.selectedAgentConnection?.detail ?? "No runtime selected."
+    }
+
     private func outputBlock(title: String, body: String, detail: String, tint: Color, monospaced: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
@@ -710,6 +784,17 @@ struct ContentView: View {
             .background(tint.opacity(0.12))
             .overlay(RoundedRectangle(cornerRadius: 999).stroke(tint.opacity(0.35), lineWidth: 1))
             .clipShape(Capsule())
+    }
+
+    private func agentStateTitle(for agent: AgentConnection) -> String {
+        switch agent.status {
+        case .connected:
+            "ATTACHED"
+        case .available:
+            "READY"
+        case .unavailable:
+            "OFFLINE"
+        }
     }
 
     private func handleProjectImport(_ result: Result<[URL], any Error>) {

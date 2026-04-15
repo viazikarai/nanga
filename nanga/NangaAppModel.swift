@@ -248,6 +248,62 @@ final class NangaAppModel {
         persistAgentSelection(statusMessage: "Updated selected agent model.")
     }
 
+    func linkSelectedAgentNow() async {
+        guard isAgentSelectionLocked else {
+            persistenceStatus = "Select and lock an agent before linking."
+            return
+        }
+
+        guard hasProjectRoot else {
+            persistenceStatus = "Select a project folder before linking."
+            return
+        }
+
+        resetLiveAgentEvents()
+
+        do {
+            try await connectSelectedAgentIfNeeded(forceReconnect: false)
+            if let sessionID = selectedAgentSessionID {
+                persistenceStatus = "Nanga linked to \(selectedAgentConnection?.runtimeName ?? "the selected agent") on thread \(sessionID)."
+            } else {
+                persistenceStatus = "Agent is ready, but no active thread was created."
+            }
+        } catch {
+            persistenceStatus = "Failed to link to \(selectedAgentConnection?.runtimeName ?? "selected agent"): \(error.localizedDescription)"
+        }
+    }
+
+    func relinkSelectedAgentNow() async {
+        guard isAgentSelectionLocked else {
+            persistenceStatus = "Select and lock an agent before re-linking."
+            return
+        }
+
+        guard hasProjectRoot else {
+            persistenceStatus = "Select a project folder before re-linking."
+            return
+        }
+
+        resetLiveAgentEvents()
+        mutateProject { project in
+            if project.agentSession?.runtimeID == selectedAgentRuntimeID {
+                project.agentSession = nil
+            }
+        }
+        refreshAgentConnections()
+
+        do {
+            try await connectSelectedAgentIfNeeded(forceReconnect: true)
+            if let sessionID = selectedAgentSessionID {
+                persistenceStatus = "Nanga re-linked to \(selectedAgentConnection?.runtimeName ?? "the selected agent") on thread \(sessionID)."
+            } else {
+                persistenceStatus = "Re-link finished without an active thread."
+            }
+        } catch {
+            persistenceStatus = "Failed to re-link \(selectedAgentConnection?.runtimeName ?? "selected agent"): \(error.localizedDescription)"
+        }
+    }
+
     func discoverCandidateFiles() {
         guard canDiscoverCandidateFiles else {
             persistenceStatus = "Open a project folder and complete the task before discovering files."
@@ -575,7 +631,7 @@ final class NangaAppModel {
 
             var attachedConnection = connection
             attachedConnection.status = .connected
-            attachedConnection.detail = "Attached to active \(connection.runtimeName) thread \(session.threadID)."
+            attachedConnection.detail = "Attached to active \(connection.runtimeName) thread \(session.threadID). \(connection.detail)"
             return attachedConnection
         }
 
@@ -610,12 +666,20 @@ final class NangaAppModel {
         return selectedProject.agentSession?.threadID
     }
 
-    private func connectSelectedAgentIfNeeded() async throws {
+    private func connectSelectedAgentIfNeeded(forceReconnect: Bool = false) async throws {
         guard let rootURL = activeProjectRootURL ?? selectedProject.rootFolder?.resolvedURL else {
             return
         }
 
-        guard activeSessionID(for: selectedAgentRuntimeID) == nil else {
+        if forceReconnect {
+            mutateProject { project in
+                if project.agentSession?.runtimeID == selectedAgentRuntimeID {
+                    project.agentSession = nil
+                }
+            }
+        }
+
+        guard forceReconnect || activeSessionID(for: selectedAgentRuntimeID) == nil else {
             return
         }
 
