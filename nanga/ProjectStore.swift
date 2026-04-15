@@ -6,7 +6,7 @@ struct ProjectStore {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    nonisolated init(
+    init(
         baseDirectoryURL: URL = URL.applicationSupportDirectory.appending(path: "Nanga", directoryHint: .isDirectory),
         fileManager: FileManager = .default
     ) {

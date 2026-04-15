@@ -7,17 +7,33 @@ final class NangaAppModel {
     @ObservationIgnored private let projectStore: ProjectStore
     @ObservationIgnored private var activeProjectRootURL: URL?
     @ObservationIgnored private let fileDiscoveryService: FileDiscoveryService
+    @ObservationIgnored private let executionPackageBuilder: ExecutionPackageBuilder
+    @ObservationIgnored private let agentRuntime: any AgentRuntime
 
     var selectedProject: NangaProject
     var persistenceStatus: String
 
+    convenience init() {
+        self.init(
+            selectedProject: nil,
+            projectStore: ProjectStore(),
+            fileDiscoveryService: FileDiscoveryService(),
+            executionPackageBuilder: ExecutionPackageBuilder(),
+            agentRuntime: MockAgentRuntime()
+        )
+    }
+
     init(
-        selectedProject: NangaProject? = nil,
-        projectStore: ProjectStore = ProjectStore(),
-        fileDiscoveryService: FileDiscoveryService = FileDiscoveryService()
+        selectedProject: NangaProject?,
+        projectStore: ProjectStore,
+        fileDiscoveryService: FileDiscoveryService,
+        executionPackageBuilder: ExecutionPackageBuilder,
+        agentRuntime: any AgentRuntime
     ) {
         self.projectStore = projectStore
         self.fileDiscoveryService = fileDiscoveryService
+        self.executionPackageBuilder = executionPackageBuilder
+        self.agentRuntime = agentRuntime
 
         if let selectedProject {
             self.selectedProject = selectedProject
@@ -173,36 +189,45 @@ final class NangaAppModel {
         persistProject(statusMessage: "Updated selected files in scope.")
     }
 
-    func runIteration() {
+    func runIteration() async {
         guard canRunIteration else {
             persistenceStatus = "Run requires a project root, a complete task, and at least one selected file."
+            return
+        }
+
+        guard let rootURL = activeProjectRootURL ?? selectedProject.rootFolder?.resolvedURL else {
+            persistenceStatus = "Project root could not be resolved."
             return
         }
 
         selectedProject.currentIteration.execution = ExecutionSummary(
             status: .running,
             headline: "Running scoped iteration",
-            detail: "Preparing task, selected signal, and scoped files for execution."
+            detail: "Compacting task, signal, and scoped files into an execution package."
         )
+        persistProject(statusMessage: "Preparing scoped execution package.")
 
-        let selectedFiles = selectedProject.currentIteration.scope.files
-        let resultDetail = "Prepared \(selectedFiles.count) files for the task '\(selectedProject.currentIteration.task.title)'."
-        refreshSignalFromCurrentState(
-            headline: "Execution package refreshed",
-            detail: resultDetail
-        )
+        do {
+            let carryForwardItems = buildCarryForwardItems()
+            let executionPackage = try executionPackageBuilder.build(
+                project: selectedProject,
+                rootURL: rootURL,
+                selectedFiles: selectedProject.currentIteration.scope.files,
+                carryForwardItems: carryForwardItems
+            )
+            let result = try await agentRuntime.execute(executionPackage)
 
-        selectedProject.currentIteration.savedState = SavedIterationState(
-            summary: "Saved a refreshed iteration frame ready for the next loop.",
-            carriedForwardItems: buildCarryForwardItems()
-        )
-        selectedProject.currentIteration.execution = ExecutionSummary(
-            status: .refreshed,
-            headline: "Iteration refreshed",
-            detail: "Nanga refreshed signal and saved the next iteration state from the current scoped frame."
-        )
-        saveIterationCheckpoint()
-        persistProject(statusMessage: "Ran the iteration loop and saved the next iteration state.")
+            applyExecutionResult(result, package: executionPackage)
+            saveIterationCheckpoint()
+            persistProject(statusMessage: "Built the scoped execution package and ran it through the active runtime.")
+        } catch {
+            selectedProject.currentIteration.execution = ExecutionSummary(
+                status: .failed,
+                headline: "Execution failed",
+                detail: error.localizedDescription
+            )
+            persistProject(statusMessage: "Failed to run the scoped iteration: \(error.localizedDescription)")
+        }
     }
 
     private func buildCarryForwardItems() -> [String] {
@@ -242,6 +267,19 @@ final class NangaAppModel {
             status: .refreshed,
             headline: headline,
             detail: detail
+        )
+    }
+
+    private func applyExecutionResult(_ result: ExecutionResult, package: ExecutionPackage) {
+        selectedProject.currentIteration.signal = result.refreshedSignal
+        selectedProject.currentIteration.savedState = SavedIterationState(
+            summary: "Saved a compact execution package and refreshed carry-forward state for the next iteration.",
+            carriedForwardItems: result.carriedForwardItems
+        )
+        selectedProject.currentIteration.execution = ExecutionSummary(
+            status: .refreshed,
+            headline: result.headline,
+            detail: "\(result.detail) Scoped package: \(package.fileCount) files, \(package.signal.count) signal items."
         )
     }
 
@@ -486,6 +524,7 @@ struct ExecutionSummary: Equatable, Codable {
         case ready = "Ready"
         case running = "Running"
         case refreshed = "Refreshed"
+        case failed = "Failed"
     }
 
     var status: Status

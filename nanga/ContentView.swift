@@ -148,7 +148,7 @@ struct ContentView: View {
                             )
                             .textFieldStyle(.plain)
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(nsColor(theme.primaryText))
+                            .foregroundColor(theme.primaryText)
                             .focused($focusedInput, equals: .title)
                         }
 
@@ -168,7 +168,7 @@ struct ContentView: View {
                                 ))
                                 .scrollContentBackground(.hidden)
                                 .font(.system(size: 13))
-                                .foregroundColor(nsColor(theme.primaryText))
+                                .foregroundColor(theme.primaryText)
                                 .frame(minHeight: 110)
                                 .focused($focusedInput, equals: .detail)
                             }
@@ -188,7 +188,9 @@ struct ContentView: View {
                         .disabled(!appModel.canDiscoverCandidateFiles)
 
                         Button("Run") {
-                            appModel.runIteration()
+                            Task {
+                                await appModel.runIteration()
+                            }
                         }
                         .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
                         .disabled(!appModel.canRunIteration)
@@ -460,9 +462,6 @@ struct ContentView: View {
         }
     }
 
-    private func nsColor(_ color: Color) -> NSColor {
-        NSColor(color)
-    }
 }
 
 #Preview {
@@ -470,9 +469,13 @@ struct ContentView: View {
         .frame(width: 1440, height: 920)
         .environment(
             NangaAppModel(
+                selectedProject: nil,
                 projectStore: ProjectStore(
                     baseDirectoryURL: URL.temporaryDirectory.appending(path: "NangaPreview", directoryHint: .isDirectory)
-                )
+                ),
+                fileDiscoveryService: FileDiscoveryService(),
+                executionPackageBuilder: ExecutionPackageBuilder(),
+                agentRuntime: MockAgentRuntime()
             )
         )
 }

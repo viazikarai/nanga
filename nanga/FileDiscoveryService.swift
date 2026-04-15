@@ -5,7 +5,7 @@ struct FileDiscoveryService {
     private let allowedExtensions: Set<String>
     private let maxCandidates: Int
 
-    nonisolated init(
+    init(
         fileManager: FileManager = .default,
         allowedExtensions: Set<String> = ["swift", "md", "txt", "json", "yml", "yaml"],
         maxCandidates: Int = 12
