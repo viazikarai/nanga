@@ -91,8 +91,12 @@ struct ContentView: View {
                     }
                 }
 
-                sidebarSection("Appearance") {
-                    Picker("Appearance", selection: appearanceModeBinding) {
+                HStack(alignment: .center, spacing: 12) {
+                    Text("Appearance".uppercased())
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(theme.gold)
+
+                    Picker("", selection: appearanceModeBinding) {
                         ForEach(AppearanceMode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
