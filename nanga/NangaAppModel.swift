@@ -75,7 +75,7 @@ final class NangaAppModel {
             mutateCurrentIteration { iteration in
                 iteration.task.title = newValue
             }
-            refreshTaskDrivenStateIfNeeded()
+            refreshTaskDraftState()
             persistProject(statusMessage: "Updated current task title.")
         }
     }
@@ -86,7 +86,7 @@ final class NangaAppModel {
             mutateCurrentIteration { iteration in
                 iteration.task.detail = newValue
             }
-            refreshTaskDrivenStateIfNeeded()
+            refreshTaskDraftState()
             persistProject(statusMessage: "Updated current task detail.")
         }
     }
@@ -316,11 +316,42 @@ final class NangaAppModel {
         }
     }
 
-    private func refreshTaskDrivenStateIfNeeded() {
-        guard hasProjectRoot else { return }
-        guard currentIteration.task.isReadyForExecution else { return }
+    private func refreshTaskDraftState() {
+        let task = currentIteration.task
 
-        discoverCandidateFiles()
+        mutateCurrentIteration { iteration in
+            iteration.candidateFiles = []
+            iteration.signal = buildTaskDraftSignal(for: task)
+            iteration.execution = ExecutionSummary(
+                status: .ready,
+                headline: task.isReadyForExecution ? "Task ready for discovery" : "Task draft updated",
+                detail: task.isReadyForExecution
+                    ? "Select Discover to scan the project and build a scoped execution set."
+                    : "Add both a task title and execution intent to unlock discovery."
+            )
+        }
+    }
+
+    private func buildTaskDraftSignal(for task: TaskDraft) -> [SignalItem] {
+        var signal: [SignalItem] = []
+
+        if !task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            signal.append(SignalItem(kind: .taskIntent, title: task.title))
+        }
+
+        if !task.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            signal.append(SignalItem(kind: .decision, title: task.detail))
+        }
+
+        if let root = selectedProject.rootFolder?.path {
+            signal.append(SignalItem(kind: .constraint, title: "Project root anchored at \(root)"))
+        }
+
+        if signal.isEmpty {
+            signal.append(SignalItem(kind: .unfinishedWork, title: "Add a task to begin building scoped context."))
+        }
+
+        return signal
     }
 
     private func mutateCurrentIteration(_ update: (inout IterationState) -> Void) {

@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @Environment(NangaAppModel.self) private var appModel
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("appearanceMode") private var appearanceModeRaw = AppearanceMode.system.rawValue
     @State private var isImportingProjectRoot = false
     @FocusState private var focusedInput: InputField?
 
@@ -13,6 +14,30 @@ struct ContentView: View {
     private enum InputField {
         case title
         case detail
+    }
+
+    private enum AppearanceMode: String, CaseIterable, Identifiable {
+        case system
+        case light
+        case dark
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .system: "System"
+            case .light: "Light"
+            case .dark: "Dark"
+            }
+        }
+
+        var preferredColorScheme: ColorScheme? {
+            switch self {
+            case .system: nil
+            case .light: .light
+            case .dark: .dark
+            }
+        }
     }
 
     var body: some View {
@@ -29,6 +54,7 @@ struct ContentView: View {
             mainWorkspace(iteration: iteration)
         }
         .background(theme.baseBackground)
+        .preferredColorScheme(appearanceMode.preferredColorScheme)
         .fileImporter(
             isPresented: $isImportingProjectRoot,
             allowedContentTypes: [.folder],
@@ -63,6 +89,15 @@ struct ContentView: View {
                         }
                         .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
                     }
+                }
+
+                sidebarSection("Appearance") {
+                    Picker("Appearance", selection: appearanceModeBinding) {
+                        ForEach(AppearanceMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 sidebarSection("Current Task") {
@@ -454,7 +489,22 @@ struct ContentView: View {
     }
 
     private var theme: ConsoleTheme {
-        ConsoleTheme(colorScheme: colorScheme)
+        ConsoleTheme(colorScheme: activeColorScheme)
+    }
+
+    private var appearanceMode: AppearanceMode {
+        AppearanceMode(rawValue: appearanceModeRaw) ?? .system
+    }
+
+    private var appearanceModeBinding: Binding<AppearanceMode> {
+        Binding(
+            get: { appearanceMode },
+            set: { appearanceModeRaw = $0.rawValue }
+        )
+    }
+
+    private var activeColorScheme: ColorScheme {
+        appearanceMode.preferredColorScheme ?? colorScheme
     }
 
     private func glowingInputShell<Content: View>(title: String, isFocused: Bool, @ViewBuilder content: () -> Content) -> some View {
