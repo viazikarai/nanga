@@ -207,6 +207,7 @@ struct ContentView: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
+
                 }
 
                 Spacer()
@@ -440,6 +441,7 @@ struct ContentView: View {
                         tint: theme.cyanMuted
                     )
                 }
+
             }
         }
     }
@@ -511,7 +513,9 @@ struct ContentView: View {
 
     private func cleanAgentButton(connection: AgentConnection) -> some View {
         Button {
-            appModel.lockSelectedAgentRuntime(id: connection.runtimeID)
+            Task {
+                await appModel.lockSelectedAgentRuntime(id: connection.runtimeID)
+            }
         } label: {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -551,8 +555,8 @@ struct ContentView: View {
             .shadow(color: theme.agentButtonShadow(connection: connection), radius: 16, x: 0, y: 10)
         }
         .buttonStyle(.plain)
-        .disabled(!appModel.hasProjectRoot || !connection.canExecute)
-        .opacity((appModel.hasProjectRoot && connection.canExecute) ? 1 : 0.72)
+        .disabled(!appModel.hasProjectRoot)
+        .opacity(appModel.hasProjectRoot ? 1 : 0.72)
         .offset(y: selectionCloudDrift ? -4 : 4)
         .animation(
             .easeInOut(duration: 3.2).repeatForever(autoreverses: true),

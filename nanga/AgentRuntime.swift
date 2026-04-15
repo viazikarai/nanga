@@ -32,13 +32,51 @@ struct AgentConnection: Identifiable, Equatable {
     }
 }
 
+struct AgentSession: Equatable, Codable {
+    var runtimeID: String
+    var threadID: String
+}
+
+struct AgentRuntimeEvent: Equatable, Sendable {
+    enum Kind: String, Equatable, Sendable {
+        case status
+        case threadStarted
+        case message
+        case error
+    }
+
+    var kind: Kind
+    var message: String
+}
+
 protocol AgentRuntime {
     var id: String { get }
     var displayName: String { get }
     var models: [AgentModel] { get }
 
     func detectConnection(at rootURL: URL?) -> AgentConnection
-    func execute(_ package: ExecutionPackage, in rootURL: URL, model: AgentModel?) async throws -> ExecutionResult
+    func connect(
+        in rootURL: URL,
+        model: AgentModel?,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> AgentSession?
+    func execute(
+        _ package: ExecutionPackage,
+        sessionID: String?,
+        in rootURL: URL,
+        model: AgentModel?,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> ExecutionResult
+}
+
+extension AgentRuntime {
+    func connect(
+        in rootURL: URL,
+        model: AgentModel?,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> AgentSession? {
+        nil
+    }
 }
 
 struct AgentRuntimeRegistry {
@@ -76,7 +114,7 @@ struct CodexRuntime: AgentRuntime {
             )
         }
 
-        guard CLIWorkspaceDetector.codexIsLoggedIn() else {
+        guard let loginStatus = CLIWorkspaceDetector.codexLoginStatus() else {
             return AgentConnection(
                 runtimeID: id,
                 runtimeName: displayName,
@@ -91,7 +129,7 @@ struct CodexRuntime: AgentRuntime {
                 runtimeID: id,
                 runtimeName: displayName,
                 status: .available,
-                detail: "Codex is authenticated. Open a project folder to attach it.",
+                detail: "\(loginStatus). Open a project folder to attach it.",
                 models: models
             )
         }
@@ -102,24 +140,44 @@ struct CodexRuntime: AgentRuntime {
         )
 
         let detail = markers.isEmpty
-            ? "Codex is authenticated and ready for this folder."
-            : "Codex is authenticated. Workspace markers: \(markers.joined(separator: ", "))"
+            ? "\(loginStatus). Codex is ready to attach to this folder."
+            : "\(loginStatus). Ready to attach in this folder. Workspace markers: \(markers.joined(separator: ", "))"
 
         return AgentConnection(
             runtimeID: id,
             runtimeName: displayName,
-            status: .connected,
+            status: .available,
             detail: detail,
             models: models
         )
     }
 
-    func execute(_ package: ExecutionPackage, in rootURL: URL, model: AgentModel?) async throws -> ExecutionResult {
+    func connect(
+        in rootURL: URL,
+        model: AgentModel?,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> AgentSession? {
+        try await CodexCLIExecutor.connect(
+            rootURL: rootURL,
+            model: model,
+            eventHandler: eventHandler
+        )
+    }
+
+    func execute(
+        _ package: ExecutionPackage,
+        sessionID: String?,
+        in rootURL: URL,
+        model: AgentModel?,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> ExecutionResult {
         try await CodexCLIExecutor.execute(
             package,
             runtimeName: displayName,
+            sessionID: sessionID,
             model: model,
-            rootURL: rootURL
+            rootURL: rootURL,
+            eventHandler: eventHandler
         )
     }
 }
@@ -143,7 +201,13 @@ struct ClaudeCodeRuntime: AgentRuntime {
         )
     }
 
-    func execute(_ package: ExecutionPackage, in rootURL: URL, model: AgentModel?) async throws -> ExecutionResult {
+    func execute(
+        _ package: ExecutionPackage,
+        sessionID: String?,
+        in rootURL: URL,
+        model: AgentModel?,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> ExecutionResult {
         MockRuntimeExecutor.execute(
             package,
             runtimeName: displayName,
@@ -171,7 +235,13 @@ struct CursorRuntime: AgentRuntime {
         )
     }
 
-    func execute(_ package: ExecutionPackage, in rootURL: URL, model: AgentModel?) async throws -> ExecutionResult {
+    func execute(
+        _ package: ExecutionPackage,
+        sessionID: String?,
+        in rootURL: URL,
+        model: AgentModel?,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> ExecutionResult {
         MockRuntimeExecutor.execute(
             package,
             runtimeName: displayName,
@@ -209,7 +279,6 @@ private enum CLIWorkspaceDetector {
             )
         }
 
-        let fileManager = FileManager.default
         let markers = detectWorkspaceMarkers(at: rootURL, workspaceMarkers: workspaceMarkers)
 
         if markers.isEmpty {
@@ -232,15 +301,16 @@ private enum CLIWorkspaceDetector {
     }
 
     static func commandExists(_ command: String) -> Bool {
-        commandOutput(arguments: ["which", command]) != nil
+        resolvedCommandURL(command) != nil
     }
 
-    static func codexIsLoggedIn() -> Bool {
-        guard let output = commandOutput(arguments: ["codex", "login", "status"]) else {
-            return false
+    static func codexLoginStatus() -> String? {
+        guard let output = commandOutput(arguments: ["codex", "login", "status"]),
+              output.localizedCaseInsensitiveContains("logged in") else {
+            return nil
         }
 
-        return output.localizedCaseInsensitiveContains("logged in")
+        return output
     }
 
     static func detectWorkspaceMarkers(at rootURL: URL, workspaceMarkers: [String]) -> [String] {
@@ -251,9 +321,22 @@ private enum CLIWorkspaceDetector {
     }
 
     static func commandOutput(arguments: [String]) -> String? {
+        guard !arguments.isEmpty else { return nil }
+
         let process = Process()
-        process.executableURL = URL(filePath: "/usr/bin/env")
-        process.arguments = arguments
+        let executableURL: URL
+        let processArguments: [String]
+
+        if let commandURL = resolvedCommandURL(arguments[0]) {
+            executableURL = commandURL
+            processArguments = Array(arguments.dropFirst())
+        } else {
+            executableURL = URL(filePath: "/usr/bin/env")
+            processArguments = arguments
+        }
+
+        process.executableURL = executableURL
+        process.arguments = processArguments
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
         process.standardError = Pipe()
@@ -270,6 +353,36 @@ private enum CLIWorkspaceDetector {
         } catch {
             return nil
         }
+    }
+
+    static func resolvedCommandURL(_ command: String) -> URL? {
+        if command.contains("/") {
+            let url = URL(filePath: command)
+            return FileManager.default.isExecutableFile(atPath: url.path(percentEncoded: false)) ? url : nil
+        }
+
+        let searchPaths = (
+            ProcessInfo.processInfo.environment["PATH"]?.split(separator: ":").map(String.init) ?? []
+        ) + [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+            NSHomeDirectory() + "/.local/bin",
+            NSHomeDirectory() + "/bin"
+        ]
+
+        let uniquePaths = Array(NSOrderedSet(array: searchPaths)) as? [String] ?? searchPaths
+        for directory in uniquePaths {
+            let candidate = URL(filePath: directory).appending(path: command)
+            if FileManager.default.isExecutableFile(atPath: candidate.path(percentEncoded: false)) {
+                return candidate
+            }
+        }
+
+        return nil
     }
 }
 
@@ -316,73 +429,52 @@ private enum MockRuntimeExecutor {
             headline: "\(runtimeName) package staged",
             detail: "\(runtimeName) received \(package.fileCount) scoped files for '\(package.task.title)' using \(selectedModel).",
             refreshedSignal: refreshedSignal,
-            carriedForwardItems: package.carryForwardItems
+            carriedForwardItems: package.carryForwardItems,
+            sessionID: nil
         )
     }
 }
 
 private enum CodexCLIExecutor {
+    static func connect(
+        rootURL: URL,
+        model: AgentModel?,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> AgentSession {
+        let result = try await runCodexCommand(
+            prompt: """
+            Nanga is attaching to this workspace. Reply with CONNECTED and nothing else.
+            """,
+            sessionID: nil,
+            model: model,
+            rootURL: rootURL,
+            eventHandler: eventHandler
+        )
+
+        guard let threadID = result.threadID else {
+            throw CodexRuntimeError.executionFailed("Codex did not return a thread identifier.")
+        }
+
+        return AgentSession(runtimeID: "codex", threadID: threadID)
+    }
+
     static func execute(
         _ package: ExecutionPackage,
         runtimeName: String,
+        sessionID: String?,
         model: AgentModel?,
-        rootURL: URL
+        rootURL: URL,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
     ) async throws -> ExecutionResult {
-        let outputURL = URL.temporaryDirectory.appending(path: "nanga-codex-last-message-\(UUID().uuidString).txt")
         let prompt = buildPrompt(from: package)
-
-        defer {
-            try? FileManager.default.removeItem(at: outputURL)
-        }
-
-        let process = Process()
-        process.executableURL = URL(filePath: "/usr/bin/env")
-
-        var arguments = [
-            "codex",
-            "exec",
-            "--cd", rootURL.path(percentEncoded: false),
-            "--sandbox", "workspace-write",
-            "--full-auto",
-            "--ephemeral",
-            "--output-last-message", outputURL.path(percentEncoded: false),
-            "-"
-        ]
-
-        if let model {
-            arguments.insert(contentsOf: ["--model", model.id], at: 2)
-        }
-
-        process.arguments = arguments
-
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        try process.run()
-        stdinPipe.fileHandleForWriting.write(Data(prompt.utf8))
-        try? stdinPipe.fileHandleForWriting.close()
-
-        let stdoutData = try await stdoutPipe.fileHandleForReading.readToEnd() ?? Data()
-        let stderrData = try await stderrPipe.fileHandleForReading.readToEnd() ?? Data()
-        process.waitUntilExit()
-
-        let stdout = String(decoding: stdoutData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        let stderr = String(decoding: stderrData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard process.terminationStatus == 0 else {
-            let failureDetail = [stderr, stdout]
-                .filter { !$0.isEmpty }
-                .joined(separator: "\n")
-            throw CodexRuntimeError.executionFailed(failureDetail.isEmpty ? "Codex CLI exited with status \(process.terminationStatus)." : failureDetail)
-        }
-
-        let message = (try? String(contentsOf: outputURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines))
-            .flatMap { $0.isEmpty ? nil : $0 }
-            ?? stdout
+        let runResult = try await runCodexCommand(
+            prompt: prompt,
+            sessionID: sessionID,
+            model: model,
+            rootURL: rootURL,
+            eventHandler: eventHandler
+        )
+        let message = runResult.message
 
         var refreshedSignal = package.signal.map { signal in
             SignalItem(kind: signal.kind, title: signal.title)
@@ -408,8 +500,175 @@ private enum CodexCLIExecutor {
             headline: "\(runtimeName) execution complete",
             detail: message.isEmpty ? "Codex completed without a final message." : message,
             refreshedSignal: refreshedSignal,
-            carriedForwardItems: package.carryForwardItems
+            carriedForwardItems: package.carryForwardItems,
+            sessionID: runResult.threadID
         )
+    }
+
+    private static func runCodexCommand(
+        prompt: String,
+        sessionID: String?,
+        model: AgentModel?,
+        rootURL: URL,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> (threadID: String?, message: String) {
+        let process = Process()
+        guard let codexURL = CLIWorkspaceDetector.resolvedCommandURL("codex") else {
+            throw CodexRuntimeError.executionFailed("Codex CLI was not found on this machine.")
+        }
+        process.executableURL = codexURL
+        process.currentDirectoryURL = rootURL
+
+        if let sessionID {
+            process.arguments = ["exec", "resume", sessionID]
+        } else {
+            process.arguments = [
+                "exec",
+                "--cd", rootURL.path(percentEncoded: false),
+                "--sandbox", "workspace-write",
+                "--full-auto"
+            ]
+        }
+        process.arguments?.append(contentsOf: ["--json", "-"])
+
+        if let model {
+            process.arguments?.insert(contentsOf: ["--model", model.id], at: 1)
+        }
+
+        let stdinPipe = Pipe()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardInput = stdinPipe
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        try process.run()
+        stdinPipe.fileHandleForWriting.write(Data(prompt.utf8))
+        try? stdinPipe.fileHandleForWriting.close()
+
+        async let stdout = collectLines(
+            from: stdoutPipe.fileHandleForReading,
+            eventHandler: eventHandler
+        )
+        async let stderrOutput = collectStderr(from: stderrPipe.fileHandleForReading, eventHandler: eventHandler)
+        await waitForExit(of: process)
+
+        let stdoutOutput = try await stdout
+        let stderrText = try await stderrOutput
+        let stderr = stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard process.terminationStatus == 0 else {
+            let failureDetail = [stderr, stdoutOutput.trimmingCharacters(in: .whitespacesAndNewlines)]
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            throw CodexRuntimeError.executionFailed(failureDetail.isEmpty ? "Codex CLI exited with status \(process.terminationStatus)." : failureDetail)
+        }
+
+        let parsed = parseJSONL(stdoutOutput)
+        let message = parsed.message ?? stdoutOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (parsed.threadID, message)
+    }
+
+    private static func collectLines(
+        from handle: FileHandle,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> String {
+        var output = ""
+
+        for try await line in handle.bytes.lines {
+            output.append(line)
+            output.append("\n")
+
+            if let event = parseEvent(line) {
+                eventHandler(event)
+            }
+        }
+
+        return output
+    }
+
+    private static func collectStderr(
+        from handle: FileHandle,
+        eventHandler: @escaping @Sendable (AgentRuntimeEvent) -> Void
+    ) async throws -> String {
+        var output = ""
+
+        for try await line in handle.bytes.lines {
+            output.append(line)
+            output.append("\n")
+
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                eventHandler(AgentRuntimeEvent(kind: .error, message: trimmed))
+            }
+        }
+
+        return output
+    }
+
+    private static func waitForExit(of process: Process) async {
+        await withCheckedContinuation { continuation in
+            process.terminationHandler = { _ in
+                continuation.resume()
+            }
+        }
+    }
+
+    private static func parseEvent(_ line: String) -> AgentRuntimeEvent? {
+        guard let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = object["type"] as? String else {
+            return nil
+        }
+
+        switch type {
+        case "thread.started":
+            if let threadID = object["thread_id"] as? String {
+                return AgentRuntimeEvent(kind: .threadStarted, message: "Attached to Codex thread \(threadID)")
+            }
+        case "turn.started":
+            return AgentRuntimeEvent(kind: .status, message: "Codex turn started")
+        case "item.completed":
+            if let item = object["item"] as? [String: Any],
+               let text = item["text"] as? String,
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return AgentRuntimeEvent(kind: .message, message: text.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+        case "error":
+            if let message = object["message"] as? String {
+                return AgentRuntimeEvent(kind: .error, message: message)
+            }
+        default:
+            break
+        }
+
+        return nil
+    }
+
+    private static func parseJSONL(_ output: String) -> (threadID: String?, message: String?) {
+        var threadID: String?
+        var message: String?
+
+        for line in output.split(separator: "\n") {
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let type = object["type"] as? String else {
+                continue
+            }
+
+            if type == "thread.started" {
+                threadID = object["thread_id"] as? String
+            }
+
+            if type == "item.completed",
+               let item = object["item"] as? [String: Any],
+               let text = item["text"] as? String,
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        return (threadID, message)
     }
 
     private static func buildPrompt(from package: ExecutionPackage) -> String {

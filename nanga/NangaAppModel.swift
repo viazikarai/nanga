@@ -16,6 +16,7 @@ final class NangaAppModel {
     var selectedAgentRuntimeID: String
     var selectedAgentModelID: String
     var isAgentSelectionLocked: Bool
+    var liveAgentEvents: [AgentRuntimeEvent]
 
     convenience init() {
         self.init(
@@ -39,12 +40,15 @@ final class NangaAppModel {
         self.executionPackageBuilder = executionPackageBuilder
         self.agentRuntimeRegistry = agentRuntimeRegistry
         self.agentConnections = []
-        self.selectedAgentRuntimeID = agentRuntimeRegistry.runtimes.first?.id ?? ""
+        self.selectedAgentRuntimeID = selectedProject?.selectedAgentRuntimeID ?? agentRuntimeRegistry.runtimes.first?.id ?? ""
         self.selectedAgentModelID = ""
-        self.isAgentSelectionLocked = false
+        self.isAgentSelectionLocked = selectedProject?.isAgentSelectionLocked ?? false
+        self.liveAgentEvents = []
+        self.persistenceStatus = ""
 
         if let selectedProject {
             self.selectedProject = selectedProject
+            self.selectedAgentModelID = selectedProject.selectedAgentModelID
             self.persistenceStatus = "Loaded project from injected state."
             restoreProjectRootAccess()
             persistProject()
@@ -53,10 +57,17 @@ final class NangaAppModel {
 
         if let persistedProject = try? projectStore.loadProject() {
             self.selectedProject = persistedProject
+            self.selectedAgentRuntimeID = persistedProject.selectedAgentRuntimeID
+            self.selectedAgentModelID = persistedProject.selectedAgentModelID
+            self.isAgentSelectionLocked = persistedProject.isAgentSelectionLocked
             self.persistenceStatus = "Loaded saved iteration state from disk."
             restoreProjectRootAccess()
         } else {
-            self.selectedProject = .sample
+            let sampleProject = NangaProject.sample
+            self.selectedProject = sampleProject
+            self.selectedAgentRuntimeID = sampleProject.selectedAgentRuntimeID
+            self.selectedAgentModelID = sampleProject.selectedAgentModelID
+            self.isAgentSelectionLocked = sampleProject.isAgentSelectionLocked
             self.persistenceStatus = "Started with a sample project until a saved project exists."
             persistProject()
         }
@@ -85,8 +96,7 @@ final class NangaAppModel {
             mutateCurrentIteration { iteration in
                 iteration.task.title = newValue
             }
-            refreshTaskDraftState()
-            persistProject(statusMessage: "Updated current task title.")
+            handleTaskDraftChange(statusMessage: "Updated current task title.")
         }
     }
 
@@ -96,8 +106,7 @@ final class NangaAppModel {
             mutateCurrentIteration { iteration in
                 iteration.task.detail = newValue
             }
-            refreshTaskDraftState()
-            persistProject(statusMessage: "Updated current task detail.")
+            handleTaskDraftChange(statusMessage: "Updated current task detail.")
         }
     }
 
@@ -139,6 +148,18 @@ final class NangaAppModel {
 
     var canRunIteration: Bool {
         canDiscoverCandidateFiles && selectedFileCount > 0 && isAgentSelectionLocked && (selectedAgentConnection?.canExecute == true)
+    }
+
+    var agentFeedText: String {
+        if liveAgentEvents.isEmpty {
+            return "No agent activity yet."
+        }
+
+        return liveAgentEvents.map(\.message).joined(separator: "\n")
+    }
+
+    var selectedAgentSessionID: String? {
+        activeSessionID(for: selectedAgentRuntimeID)
     }
 
     func saveIterationCheckpoint() {
@@ -196,20 +217,35 @@ final class NangaAppModel {
     func selectAgentRuntime(id: String) {
         selectedAgentRuntimeID = id
         syncSelectedAgentModel()
+        persistAgentSelection(statusMessage: "Updated selected agent.")
     }
 
-    func lockSelectedAgentRuntime(id: String) {
+    func lockSelectedAgentRuntime(id: String) async {
         selectedAgentRuntimeID = id
         syncSelectedAgentModel()
         isAgentSelectionLocked = true
+        resetLiveAgentEvents()
+        if selectedProject.agentSession?.runtimeID != id {
+            mutateProject { project in
+                project.agentSession = nil
+            }
+        }
+        do {
+            try await connectSelectedAgentIfNeeded()
+            persistAgentSelection(statusMessage: "Locked the project onto the selected agent.")
+        } catch {
+            persistAgentSelection(statusMessage: "Failed to attach to the selected agent: \(error.localizedDescription)")
+        }
     }
 
     func unlockAgentSelection() {
         isAgentSelectionLocked = false
+        persistAgentSelection(statusMessage: "Unlocked agent selection.")
     }
 
     func selectAgentModel(id: String) {
         selectedAgentModelID = id
+        persistAgentSelection(statusMessage: "Updated selected agent model.")
     }
 
     func discoverCandidateFiles() {
@@ -234,10 +270,10 @@ final class NangaAppModel {
                 iteration.candidateFiles = candidates
             }
             refreshSignalFromCurrentState(
-                headline: "Candidate files discovered",
-                detail: "Nanga proposed files based on the task and project root."
+                headline: "Scope resolved",
+                detail: "Nanga selected the highest-signal files for this task."
             )
-            persistProject(statusMessage: "Discovered candidate files from the project root.")
+            persistProject(statusMessage: "Resolved scope from the project root.")
         } catch {
             persistenceStatus = "Failed to discover files: \(error.localizedDescription)"
         }
@@ -276,9 +312,11 @@ final class NangaAppModel {
                 detail: "Compacting task, signal, and scoped files into an execution package."
             )
         }
+        resetLiveAgentEvents()
         persistProject(statusMessage: "Preparing scoped execution package.")
 
         do {
+            try await connectSelectedAgentIfNeeded()
             let carryForwardItems = buildCarryForwardItems()
             let executionPackage = try executionPackageBuilder.build(
                 project: selectedProject,
@@ -291,7 +329,13 @@ final class NangaAppModel {
                 return
             }
 
-            let result = try await runtime.execute(executionPackage, in: rootURL, model: selectedAgentModel)
+            let result = try await runtime.execute(
+                executionPackage,
+                sessionID: activeSessionID(for: selectedAgentRuntimeID),
+                in: rootURL,
+                model: selectedAgentModel,
+                eventHandler: makeAgentEventHandler()
+            )
 
             applyExecutionResult(result, package: executionPackage)
             saveIterationCheckpoint()
@@ -363,6 +407,9 @@ final class NangaAppModel {
                 detail: "\(result.detail) Scoped package: \(package.fileCount) files, \(package.signal.count) signal items."
             )
         }
+        if let sessionID = result.sessionID {
+            persistAgentSession(AgentSession(runtimeID: selectedAgentRuntimeID, threadID: sessionID))
+        }
     }
 
     private func refreshTaskDraftState() {
@@ -373,11 +420,21 @@ final class NangaAppModel {
             iteration.signal = buildTaskDraftSignal(for: task)
             iteration.execution = ExecutionSummary(
                 status: .ready,
-                headline: task.isReadyForExecution ? "Task ready for discovery" : "Task draft updated",
+                headline: task.isReadyForExecution ? "Task ready for scope resolution" : "Task draft updated",
                 detail: task.isReadyForExecution
-                    ? "Select Discover to scan the project and build a scoped execution set."
-                    : "Add both a task title and execution intent to unlock discovery."
+                    ? "Nanga will resolve the highest-signal scope from the selected project."
+                    : "Add both a task title and execution intent to unlock scoped execution."
             )
+        }
+    }
+
+    private func handleTaskDraftChange(statusMessage: String) {
+        refreshTaskDraftState()
+
+        if canDiscoverCandidateFiles {
+            discoverCandidateFiles()
+        } else {
+            persistProject(statusMessage: statusMessage)
         }
     }
 
@@ -427,6 +484,60 @@ final class NangaAppModel {
         }
     }
 
+    private func persistAgentSelection(statusMessage: String) {
+        mutateProject { project in
+            project.selectedAgentRuntimeID = selectedAgentRuntimeID
+            project.selectedAgentModelID = selectedAgentModelID
+            project.isAgentSelectionLocked = isAgentSelectionLocked
+        }
+        persistProject(statusMessage: statusMessage)
+    }
+
+    private func persistAgentSession(_ session: AgentSession) {
+        mutateProject { project in
+            project.agentSession = session
+        }
+        refreshAgentConnections()
+        persistProject(statusMessage: "Attached Nanga to the active \(session.runtimeID.capitalized) thread.")
+    }
+
+    private func makeAgentEventHandler() -> @Sendable (AgentRuntimeEvent) -> Void {
+        { event in
+            Task { @MainActor [weak self] in
+                self?.recordAgentEvent(event)
+            }
+        }
+    }
+
+    private func recordAgentEvent(_ event: AgentRuntimeEvent) {
+        liveAgentEvents.append(event)
+        liveAgentEvents = Array(liveAgentEvents.suffix(24))
+
+        let headline: String
+        switch event.kind {
+        case .threadStarted:
+            headline = "Codex attached"
+        case .status:
+            headline = "Codex running"
+        case .message:
+            headline = "Codex responded"
+        case .error:
+            headline = "Codex signaled an issue"
+        }
+
+        mutateCurrentIteration { iteration in
+            iteration.execution = ExecutionSummary(
+                status: .running,
+                headline: headline,
+                detail: event.message
+            )
+        }
+    }
+
+    private func resetLiveAgentEvents() {
+        liveAgentEvents = []
+    }
+
     private func restoreProjectRootAccess() {
         guard let rootFolder = selectedProject.rootFolder else { return }
 
@@ -456,7 +567,17 @@ final class NangaAppModel {
 
     private func refreshAgentConnections() {
         let rootURL = activeProjectRootURL ?? selectedProject.rootFolder?.resolvedURL
-        agentConnections = agentRuntimeRegistry.detectConnections(at: rootURL)
+        let detectedConnections = agentRuntimeRegistry.detectConnections(at: rootURL)
+        agentConnections = detectedConnections.map { connection in
+            guard let session = selectedProject.agentSession, session.runtimeID == connection.runtimeID else {
+                return connection
+            }
+
+            var attachedConnection = connection
+            attachedConnection.status = .connected
+            attachedConnection.detail = "Attached to active \(connection.runtimeName) thread \(session.threadID)."
+            return attachedConnection
+        }
 
         if selectedAgentRuntimeID.isEmpty || !agentConnections.contains(where: { $0.runtimeID == selectedAgentRuntimeID }) {
             if let preferred = agentConnections.first(where: { $0.status == .connected })
@@ -471,6 +592,7 @@ final class NangaAppModel {
         }
 
         syncSelectedAgentModel()
+        persistAgentSelection(statusMessage: "Refreshed available agent connections.")
     }
 
     private func syncSelectedAgentModel() {
@@ -479,13 +601,60 @@ final class NangaAppModel {
             selectedAgentModelID = models.first?.id ?? ""
         }
     }
+
+    private func activeSessionID(for runtimeID: String) -> String? {
+        guard selectedProject.agentSession?.runtimeID == runtimeID else {
+            return nil
+        }
+
+        return selectedProject.agentSession?.threadID
+    }
+
+    private func connectSelectedAgentIfNeeded() async throws {
+        guard let rootURL = activeProjectRootURL ?? selectedProject.rootFolder?.resolvedURL else {
+            return
+        }
+
+        guard activeSessionID(for: selectedAgentRuntimeID) == nil else {
+            return
+        }
+
+        guard let runtime = agentRuntimeRegistry.runtime(for: selectedAgentRuntimeID) else {
+            return
+        }
+
+        if let session = try await runtime.connect(
+            in: rootURL,
+            model: selectedAgentModel,
+            eventHandler: makeAgentEventHandler()
+        ) {
+            persistAgentSession(session)
+        }
+    }
 }
 
 struct NangaProject: Identifiable, Equatable, Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case repositoryName
+        case rootFolder
+        case selectedAgentRuntimeID
+        case selectedAgentModelID
+        case isAgentSelectionLocked
+        case agentSession
+        case currentIteration
+        case iterationHistory
+    }
+
     let id: UUID
     var name: String
     var repositoryName: String
     var rootFolder: ProjectFolderReference?
+    var selectedAgentRuntimeID: String
+    var selectedAgentModelID: String
+    var isAgentSelectionLocked: Bool
+    var agentSession: AgentSession?
     var currentIteration: IterationState
     var iterationHistory: [IterationRecord]
 
@@ -494,6 +663,10 @@ struct NangaProject: Identifiable, Equatable, Codable {
         name: "Nanga",
         repositoryName: "nanga",
         rootFolder: nil,
+        selectedAgentRuntimeID: "codex",
+        selectedAgentModelID: "",
+        isAgentSelectionLocked: false,
+        agentSession: nil,
         currentIteration: IterationState.sample,
         iterationHistory: [
             IterationRecord(
@@ -505,6 +678,44 @@ struct NangaProject: Identifiable, Equatable, Codable {
             )
         ]
     )
+
+    init(
+        id: UUID,
+        name: String,
+        repositoryName: String,
+        rootFolder: ProjectFolderReference?,
+        selectedAgentRuntimeID: String,
+        selectedAgentModelID: String,
+        isAgentSelectionLocked: Bool,
+        agentSession: AgentSession?,
+        currentIteration: IterationState,
+        iterationHistory: [IterationRecord]
+    ) {
+        self.id = id
+        self.name = name
+        self.repositoryName = repositoryName
+        self.rootFolder = rootFolder
+        self.selectedAgentRuntimeID = selectedAgentRuntimeID
+        self.selectedAgentModelID = selectedAgentModelID
+        self.isAgentSelectionLocked = isAgentSelectionLocked
+        self.agentSession = agentSession
+        self.currentIteration = currentIteration
+        self.iterationHistory = iterationHistory
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        repositoryName = try container.decode(String.self, forKey: .repositoryName)
+        rootFolder = try container.decodeIfPresent(ProjectFolderReference.self, forKey: .rootFolder)
+        selectedAgentRuntimeID = try container.decodeIfPresent(String.self, forKey: .selectedAgentRuntimeID) ?? "codex"
+        selectedAgentModelID = try container.decodeIfPresent(String.self, forKey: .selectedAgentModelID) ?? ""
+        isAgentSelectionLocked = try container.decodeIfPresent(Bool.self, forKey: .isAgentSelectionLocked) ?? false
+        agentSession = try container.decodeIfPresent(AgentSession.self, forKey: .agentSession)
+        currentIteration = try container.decode(IterationState.self, forKey: .currentIteration)
+        iterationHistory = try container.decode([IterationRecord].self, forKey: .iterationHistory)
+    }
 
     func minimizedForPersistence() -> NangaProject {
         var project = self
