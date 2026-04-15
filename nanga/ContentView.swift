@@ -7,6 +7,9 @@ struct ContentView: View {
     @AppStorage("appearanceMode") private var appearanceModeRaw = AppearanceMode.system.rawValue
     @State private var isImportingProjectRoot = false
     @FocusState private var focusedInput: InputField?
+    @State private var selectionHeroVisible = false
+    @State private var selectionCloudDrift = false
+    @State private var selectionBackgroundPulse = false
 
     private let sidebarWidth: CGFloat = 280
     private let panelSpacing: CGFloat = 16
@@ -44,14 +47,12 @@ struct ContentView: View {
         let project = appModel.selectedProject
         let iteration = appModel.currentIteration
 
-        HStack(spacing: 0) {
-            sidebar(project: project, iteration: iteration)
-                .frame(width: sidebarWidth)
-
-            Divider()
-                .overlay(theme.border)
-
-            mainWorkspace(iteration: iteration)
+        Group {
+            if appModel.isAgentSelectionLocked, let selectedAgent = appModel.selectedAgentConnection {
+                lockedWorkspace(agent: selectedAgent, project: project, iteration: iteration)
+            } else {
+                agentSelectionView
+            }
         }
         .background(theme.baseBackground)
         .preferredColorScheme(appearanceMode.preferredColorScheme)
@@ -63,110 +64,96 @@ struct ContentView: View {
         )
     }
 
-    private func sidebar(project: NangaProject, iteration: IterationState) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("NANGA")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundStyle(theme.cyan)
-                    Text("Agent workflow console")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(theme.primaryText)
-                    Text("Iteration-first workspace for scoped execution.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(theme.secondaryText)
+    private var agentSelectionView: some View {
+        ZStack {
+            theme.baseBackground
+                .ignoresSafeArea()
+
+            selectionBackgroundGlow
+
+            VStack(spacing: 0) {
+                HStack {
+                    Spacer()
+                    appearanceControl
                 }
+                .padding(.horizontal, 36)
+                .padding(.top, 30)
 
-                sidebarSection("Projects") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        sidebarValue(label: "Active", value: project.name)
-                        sidebarValue(label: "Repository", value: project.repositoryName)
-                        sidebarValue(label: "Root", value: appModel.projectRootPath)
+                Spacer()
 
-                        Button(appModel.hasProjectRoot ? "Change Folder" : "Open Folder") {
-                            isImportingProjectRoot = true
-                        }
-                        .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Appearance".uppercased())
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(theme.gold)
-
-                    Picker("", selection: appearanceModeBinding) {
-                        ForEach(AppearanceMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                }
-
-                sidebarSection("Current Task") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(iteration.task.title.isEmpty ? "No active task title" : iteration.task.title)
-                            .font(.system(size: 14, weight: .semibold))
+                VStack(alignment: .leading, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("NANGA")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundStyle(theme.cyan)
+                            .opacity(selectionHeroVisible ? 1 : 0)
+                            .offset(y: selectionHeroVisible ? 0 : 8)
+                        Text("Nanga your trusted anchor")
+                            .font(.system(size: 38, weight: .black))
                             .foregroundStyle(theme.primaryText)
-                            .lineLimit(2)
-
-                        Text(iteration.task.detail.isEmpty ? "No execution detail yet." : iteration.task.detail)
-                            .font(.system(size: 12))
+                            .opacity(selectionHeroVisible ? 1 : 0)
+                            .offset(y: selectionHeroVisible ? 0 : 14)
+                        Text("Pick one agent. Lock in. Then work inside that agent only.")
+                            .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(theme.secondaryText)
-                            .lineLimit(4)
+                            .opacity(selectionHeroVisible ? 1 : 0)
+                            .offset(y: selectionHeroVisible ? 0 : 18)
+                    }
 
-                        HStack(spacing: 8) {
-                            consoleBadge(iteration.task.isReadyForExecution ? "READY" : "INPUT", tint: iteration.task.isReadyForExecution ? theme.cyan : theme.gold)
-                            consoleBadge("\(appModel.selectedFileCount) FILES", tint: theme.cyanMuted)
+                    HStack(alignment: .top, spacing: 18) {
+                        ForEach(Array(appModel.agentConnections.enumerated()), id: \.element.id) { index, connection in
+                            cleanAgentButton(connection: connection)
+                                .opacity(selectionHeroVisible ? 1 : 0)
+                                .offset(y: selectionHeroVisible ? 0 : 22)
+                                .animation(
+                                    .spring(response: 0.7, dampingFraction: 0.86)
+                                        .delay(0.08 * Double(index + 1)),
+                                    value: selectionHeroVisible
+                                )
                         }
                     }
+
+                    Text("SELECT YOUR AGENT")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(theme.secondaryText)
+                        .opacity(selectionHeroVisible ? 1 : 0)
+                        .offset(y: selectionHeroVisible ? 0 : 12)
                 }
+                .frame(maxWidth: 760, alignment: .leading)
+                .padding(36)
+                .background(theme.heroPanelBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(theme.heroPanelStroke, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .shadow(color: theme.heroShadow, radius: 28, x: 0, y: 18)
+                .padding(.horizontal, 32)
+                .scaleEffect(selectionHeroVisible ? 1 : 0.985)
+                .opacity(selectionHeroVisible ? 1 : 0.92)
 
-                sidebarSection("Iteration History") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if project.iterationHistory.isEmpty {
-                            Text("No saved iterations yet.")
-                                .font(.system(size: 12))
-                                .foregroundStyle(theme.secondaryText)
-                        } else {
-                            ForEach(project.iterationHistory.prefix(6)) { record in
-                                HStack(alignment: .top, spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(record.label)
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(theme.primaryText)
-                                            .lineLimit(1)
-                                        Text(record.savedAt, format: .dateTime.month().day().hour().minute())
-                                            .font(.system(size: 11, design: .monospaced))
-                                            .foregroundStyle(theme.secondaryText)
-                                    }
-
-                                    Spacer(minLength: 8)
-
-                                    Button {
-                                        appModel.deleteIterationCheckpoint(id: record.id)
-                                    } label: {
-                                        Image(systemName: "trash")
-                                            .font(.system(size: 11, weight: .semibold))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(theme.secondaryText)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                                .background(theme.panelBackground)
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                            }
-                        }
-                    }
-                }
+                Spacer()
             }
-            .padding(20)
         }
-        .background(theme.sidebarBackground)
+        .onAppear {
+            withAnimation(.spring(response: 0.82, dampingFraction: 0.88)) {
+                selectionHeroVisible = true
+            }
+
+            guard !selectionCloudDrift, !selectionBackgroundPulse else { return }
+            selectionCloudDrift = true
+            selectionBackgroundPulse = true
+        }
+    }
+
+    private func lockedWorkspace(agent: AgentConnection, project: NangaProject, iteration: IterationState) -> some View {
+        VStack(spacing: 0) {
+            lockedWorkspaceHeader(agent: agent, project: project)
+            Divider()
+                .overlay(theme.border)
+
+            mainWorkspace(iteration: iteration)
+        }
     }
 
     private func mainWorkspace(iteration: IterationState) -> some View {
@@ -184,6 +171,63 @@ struct ContentView: View {
             .padding(20)
         }
         .background(theme.baseBackground)
+    }
+
+    private func lockedWorkspaceHeader(agent: AgentConnection, project: NangaProject) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text(agent.runtimeName.uppercased())
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundStyle(theme.cyanGlow)
+                        consoleBadge("CONNECTED", tint: theme.cyanGlow)
+                    }
+
+                    Text("Nanga your trusted anchor")
+                        .font(.system(size: 26, weight: .black))
+                        .foregroundStyle(theme.primaryText)
+
+                    Text("Anchor the task. Preserve the signal. Hand off only what matters.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 10) {
+                    if !appModel.availableAgentModels.isEmpty {
+                        Picker("", selection: Binding(
+                            get: { appModel.selectedAgentModelID },
+                            set: { appModel.selectAgentModel(id: $0) }
+                        )) {
+                            ForEach(appModel.availableAgentModels) { model in
+                                Text(model.displayName).tag(model.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 156)
+                    }
+
+                    Button("Change Agent") {
+                        appModel.unlockAgentSelection()
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tint: theme.gold))
+                    .frame(width: 140)
+                }
+            }
+
+            HStack(spacing: 10) {
+                consoleBadge(project.name.uppercased(), tint: theme.gold)
+                consoleBadge(agent.runtimeName.uppercased(), tint: theme.cyan)
+                consoleBadge(agent.status.label.uppercased(), tint: agent.statusTint(in: theme))
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .background(theme.sidebarBackground)
     }
 
     private func topCommandSurface(iteration: IterationState) -> some View {
@@ -253,6 +297,10 @@ struct ContentView: View {
                 }
 
                 HStack(spacing: 10) {
+                    if let selectedAgent = appModel.selectedAgentConnection {
+                        consoleBadge("\(selectedAgent.runtimeName.uppercased()) CONNECTED", tint: appModel.isAgentSelectionLocked ? theme.cyanGlow : theme.cyan)
+                        consoleBadge(selectedAgent.status.label.uppercased(), tint: selectedAgent.statusTint(in: theme))
+                    }
                     consoleBadge(appModel.hasProjectRoot ? "PROJECT ONLINE" : "PROJECT REQUIRED", tint: appModel.hasProjectRoot ? theme.cyan : theme.gold)
                     consoleBadge(iteration.task.isReadyForExecution ? "TASK READY" : "TASK INCOMPLETE", tint: iteration.task.isReadyForExecution ? theme.cyan : theme.gold)
                     consoleBadge("\(iteration.candidateFiles.count) CANDIDATES", tint: theme.cyanMuted)
@@ -416,6 +464,110 @@ struct ContentView: View {
         }
     }
 
+    private var appearanceControl: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("APPEARANCE")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(theme.secondaryText)
+
+            Picker("", selection: appearanceModeBinding) {
+                ForEach(AppearanceMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 210)
+        }
+    }
+
+    private func cleanAgentButton(connection: AgentConnection) -> some View {
+        Button {
+            appModel.lockSelectedAgentRuntime(id: connection.runtimeID)
+        } label: {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    agentLogo(for: connection)
+                    Spacer()
+                    Text(connection.status.label.uppercased())
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(connection.statusTint(in: theme))
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(connection.runtimeName)
+                        .font(.system(size: 22, weight: .black))
+                        .foregroundStyle(theme.primaryText)
+
+                    Text(agentButtonSubtitle(for: connection))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
+            .background(theme.agentButtonBackground(connection: connection))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(theme.agentButtonStroke(connection: connection), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .shadow(color: theme.agentButtonShadow(connection: connection), radius: 16, x: 0, y: 10)
+        }
+        .buttonStyle(.plain)
+        .disabled(!connection.canExecute)
+        .opacity(connection.canExecute ? 1 : 0.78)
+        .offset(y: selectionCloudDrift ? -4 : 4)
+        .animation(
+            .easeInOut(duration: 3.2).repeatForever(autoreverses: true),
+            value: selectionCloudDrift
+        )
+    }
+
+    private func agentButtonSubtitle(for connection: AgentConnection) -> String {
+        switch connection.status {
+        case .connected:
+            "Ready in this workspace."
+        case .available:
+            "Installed and ready to attach."
+        case .unavailable:
+            "Not installed on this machine."
+        }
+    }
+
+    private func agentLogo(for connection: AgentConnection) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(theme.logoPlateBackground(connection: connection))
+                .frame(width: 52, height: 52)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(theme.logoPlateStroke(connection: connection), lineWidth: 1)
+                )
+
+            switch connection.runtimeID {
+            case "codex":
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    .font(.system(size: 17, weight: .black))
+                    .foregroundStyle(connection.statusTint(in: theme))
+            case "claude-code":
+                Text("AI")
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(connection.statusTint(in: theme))
+            case "cursor":
+                Image(systemName: "cursorarrow.motionlines")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(connection.statusTint(in: theme))
+            default:
+                Image(systemName: "cloud.fill")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(connection.statusTint(in: theme))
+            }
+        }
+        .shadow(color: theme.agentButtonShadow(connection: connection), radius: 10, x: 0, y: 4)
+    }
+
     private func outputBlock(title: String, body: String, detail: String, tint: Color, monospaced: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
@@ -512,6 +664,27 @@ struct ContentView: View {
         appearanceMode.preferredColorScheme ?? colorScheme
     }
 
+    private var selectionBackgroundGlow: some View {
+        ZStack {
+            Circle()
+                .fill(theme.cyanGlow.opacity(activeColorScheme == .dark ? 0.14 : 0.10))
+                .frame(width: 420, height: 420)
+                .blur(radius: 38)
+                .offset(x: selectionBackgroundPulse ? -280 : -220, y: selectionBackgroundPulse ? -220 : -170)
+
+            Circle()
+                .fill(theme.gold.opacity(activeColorScheme == .dark ? 0.08 : 0.06))
+                .frame(width: 320, height: 320)
+                .blur(radius: 32)
+                .offset(x: selectionBackgroundPulse ? 310 : 250, y: selectionBackgroundPulse ? 200 : 150)
+        }
+        .ignoresSafeArea()
+        .animation(
+            .easeInOut(duration: 6.0).repeatForever(autoreverses: true),
+            value: selectionBackgroundPulse
+        )
+    }
+
     private func glowingInputShell<Content: View>(title: String, isFocused: Bool, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
@@ -544,12 +717,26 @@ struct ContentView: View {
                 ),
                 fileDiscoveryService: FileDiscoveryService(),
                 executionPackageBuilder: ExecutionPackageBuilder(),
-                agentRuntime: MockAgentRuntime()
+                agentRuntimeRegistry: AgentRuntimeRegistry()
             )
         )
 }
 
+private extension AgentConnection {
+    func statusTint(in theme: ConsoleTheme) -> Color {
+        switch status {
+        case .connected:
+            theme.cyan
+        case .available:
+            theme.gold
+        case .unavailable:
+            theme.secondaryText
+        }
+    }
+}
+
 private struct ConsoleTheme {
+    let isDarkMode: Bool
     let baseBackground: Color
     let sidebarBackground: Color
     let panelBackground: Color
@@ -558,16 +745,23 @@ private struct ConsoleTheme {
     let focusedInputBackground: Color
     let selectionBackground: Color
     let border: Color
+    let agentPanelBackground: Color
     let primaryText: Color
     let secondaryText: Color
     let placeholderText: Color
     let cyan: Color
+    let cyanGlow: Color
     let cyanMuted: Color
     let gold: Color
     let shadow: Color
+    let heroPanelBackground: Color
+    let heroPanelStroke: Color
+    let heroShadow: Color
 
     init(colorScheme: ColorScheme) {
+        isDarkMode = colorScheme == .dark
         cyan = Color(red: 0.0, green: 0.56, blue: 0.70)
+        cyanGlow = Color(red: 0.39, green: 0.90, blue: 1.0)
         cyanMuted = Color(red: 0.12, green: 0.47, blue: 0.58)
         gold = Color(red: 0.71, green: 0.50, blue: 0.16)
 
@@ -576,6 +770,7 @@ private struct ConsoleTheme {
             sidebarBackground = Color(red: 0.04, green: 0.06, blue: 0.10)
             panelBackground = Color(red: 0.05, green: 0.08, blue: 0.13)
             raisedBackground = Color(red: 0.07, green: 0.10, blue: 0.16)
+            agentPanelBackground = Color(red: 0.04, green: 0.09, blue: 0.14)
             inputBackground = Color(red: 0.04, green: 0.07, blue: 0.12)
             focusedInputBackground = Color(red: 0.05, green: 0.10, blue: 0.17)
             selectionBackground = Color(red: 0.05, green: 0.14, blue: 0.18)
@@ -584,11 +779,15 @@ private struct ConsoleTheme {
             secondaryText = Color(red: 0.54, green: 0.63, blue: 0.72)
             placeholderText = Color(red: 0.36, green: 0.49, blue: 0.60)
             shadow = Color(red: 0.0, green: 0.9, blue: 1.0).opacity(0.08)
+            heroPanelBackground = Color(red: 0.05, green: 0.08, blue: 0.13).opacity(0.92)
+            heroPanelStroke = cyan.opacity(0.30)
+            heroShadow = cyanGlow.opacity(0.10)
         } else {
             baseBackground = Color(red: 0.95, green: 0.97, blue: 0.99)
             sidebarBackground = Color(red: 0.92, green: 0.95, blue: 0.98)
             panelBackground = Color(red: 0.98, green: 0.99, blue: 1.0)
             raisedBackground = Color(red: 0.95, green: 0.97, blue: 0.99)
+            agentPanelBackground = Color(red: 0.90, green: 0.96, blue: 0.99)
             inputBackground = Color(red: 0.97, green: 0.98, blue: 1.0)
             focusedInputBackground = Color(red: 0.90, green: 0.96, blue: 0.99)
             selectionBackground = Color(red: 0.85, green: 0.94, blue: 0.97)
@@ -597,7 +796,149 @@ private struct ConsoleTheme {
             secondaryText = Color(red: 0.35, green: 0.44, blue: 0.52)
             placeholderText = Color(red: 0.50, green: 0.58, blue: 0.64)
             shadow = Color(red: 0.0, green: 0.22, blue: 0.36).opacity(0.06)
+            heroPanelBackground = Color(red: 0.98, green: 0.99, blue: 1.0).opacity(0.96)
+            heroPanelStroke = cyan.opacity(0.24)
+            heroShadow = Color(red: 0.10, green: 0.36, blue: 0.54).opacity(0.08)
         }
+    }
+
+    func cloudGradient(connection: AgentConnection) -> LinearGradient {
+        switch connection.status {
+        case .connected:
+            LinearGradient(
+                colors: [
+                    Color(red: 0.08, green: 0.15, blue: 0.23),
+                    Color(red: 0.04, green: 0.09, blue: 0.16)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .available:
+            LinearGradient(
+                colors: [
+                    Color(red: 0.12, green: 0.10, blue: 0.14),
+                    Color(red: 0.07, green: 0.08, blue: 0.13)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .unavailable:
+            LinearGradient(
+                colors: [raisedBackground, panelBackground],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    func agentButtonBackground(connection: AgentConnection) -> Color {
+        switch connection.status {
+        case .connected:
+            colorSchemeAware(
+                dark: Color(red: 0.07, green: 0.12, blue: 0.18),
+                light: Color(red: 0.90, green: 0.97, blue: 1.0)
+            )
+        case .available:
+            colorSchemeAware(
+                dark: Color(red: 0.09, green: 0.09, blue: 0.13),
+                light: Color(red: 0.98, green: 0.97, blue: 0.94)
+            )
+        case .unavailable:
+            raisedBackground
+        }
+    }
+
+    func agentButtonStroke(connection: AgentConnection) -> Color {
+        switch connection.status {
+        case .connected:
+            cyanGlow.opacity(0.42)
+        case .available:
+            gold.opacity(0.30)
+        case .unavailable:
+            border
+        }
+    }
+
+    func agentButtonShadow(connection: AgentConnection) -> Color {
+        switch connection.status {
+        case .connected:
+            cyanGlow.opacity(0.16)
+        case .available:
+            gold.opacity(0.08)
+        case .unavailable:
+            shadow
+        }
+    }
+
+    func logoPlateBackground(connection: AgentConnection) -> Color {
+        switch connection.status {
+        case .connected:
+            colorSchemeAware(
+                dark: Color(red: 0.04, green: 0.12, blue: 0.18),
+                light: Color(red: 0.87, green: 0.96, blue: 0.99)
+            )
+        case .available:
+            colorSchemeAware(
+                dark: Color(red: 0.11, green: 0.10, blue: 0.14),
+                light: Color(red: 0.99, green: 0.97, blue: 0.92)
+            )
+        case .unavailable:
+            raisedBackground
+        }
+    }
+
+    func logoPlateStroke(connection: AgentConnection) -> Color {
+        switch connection.status {
+        case .connected:
+            cyan.opacity(0.42)
+        case .available:
+            gold.opacity(0.34)
+        case .unavailable:
+            border
+        }
+    }
+
+    func cloudStroke(connection: AgentConnection) -> Color {
+        switch connection.status {
+        case .connected:
+            cyanGlow.opacity(0.55)
+        case .available:
+            gold.opacity(0.42)
+        case .unavailable:
+            border
+        }
+    }
+
+    func cloudShadow(connection: AgentConnection) -> Color {
+        switch connection.status {
+        case .connected:
+            cyanGlow.opacity(0.18)
+        case .available:
+            gold.opacity(0.10)
+        case .unavailable:
+            shadow
+        }
+    }
+
+    private func colorSchemeAware(dark: Color, light: Color) -> Color {
+        isDarkMode ? dark : light
+    }
+}
+
+private struct AgentCloudShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let baseY = rect.minY + rect.height * 0.34
+        let left = CGRect(x: rect.minX + rect.width * 0.08, y: baseY, width: rect.width * 0.30, height: rect.height * 0.38)
+        let center = CGRect(x: rect.minX + rect.width * 0.26, y: rect.minY + rect.height * 0.10, width: rect.width * 0.38, height: rect.height * 0.50)
+        let right = CGRect(x: rect.minX + rect.width * 0.52, y: baseY + rect.height * 0.01, width: rect.width * 0.24, height: rect.height * 0.30)
+        let base = CGRect(x: rect.minX + rect.width * 0.16, y: rect.minY + rect.height * 0.42, width: rect.width * 0.66, height: rect.height * 0.30)
+
+        var path = Path(ellipseIn: left)
+        path.addPath(Path(ellipseIn: center))
+        path.addPath(Path(ellipseIn: right))
+        path.addRoundedRect(in: base, cornerSize: CGSize(width: rect.height * 0.14, height: rect.height * 0.14))
+
+        return path
     }
 }
 

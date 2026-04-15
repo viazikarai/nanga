@@ -8,10 +8,14 @@ final class NangaAppModel {
     @ObservationIgnored private var activeProjectRootURL: URL?
     @ObservationIgnored private let fileDiscoveryService: FileDiscoveryService
     @ObservationIgnored private let executionPackageBuilder: ExecutionPackageBuilder
-    @ObservationIgnored private let agentRuntime: any AgentRuntime
+    @ObservationIgnored private let agentRuntimeRegistry: AgentRuntimeRegistry
 
     var selectedProject: NangaProject
     var persistenceStatus: String
+    var agentConnections: [AgentConnection]
+    var selectedAgentRuntimeID: String
+    var selectedAgentModelID: String
+    var isAgentSelectionLocked: Bool
 
     convenience init() {
         self.init(
@@ -19,7 +23,7 @@ final class NangaAppModel {
             projectStore: ProjectStore(),
             fileDiscoveryService: FileDiscoveryService(),
             executionPackageBuilder: ExecutionPackageBuilder(),
-            agentRuntime: MockAgentRuntime()
+            agentRuntimeRegistry: AgentRuntimeRegistry()
         )
     }
 
@@ -28,12 +32,16 @@ final class NangaAppModel {
         projectStore: ProjectStore,
         fileDiscoveryService: FileDiscoveryService,
         executionPackageBuilder: ExecutionPackageBuilder,
-        agentRuntime: any AgentRuntime
+        agentRuntimeRegistry: AgentRuntimeRegistry
     ) {
         self.projectStore = projectStore
         self.fileDiscoveryService = fileDiscoveryService
         self.executionPackageBuilder = executionPackageBuilder
-        self.agentRuntime = agentRuntime
+        self.agentRuntimeRegistry = agentRuntimeRegistry
+        self.agentConnections = []
+        self.selectedAgentRuntimeID = agentRuntimeRegistry.runtimes.first?.id ?? ""
+        self.selectedAgentModelID = ""
+        self.isAgentSelectionLocked = false
 
         if let selectedProject {
             self.selectedProject = selectedProject
@@ -52,6 +60,8 @@ final class NangaAppModel {
             self.persistenceStatus = "Started with a sample project until a saved project exists."
             persistProject()
         }
+
+        refreshAgentConnections()
     }
 
     var currentIteration: IterationState {
@@ -111,12 +121,24 @@ final class NangaAppModel {
         currentIteration.candidateFiles.filter(\.isSelected).count
     }
 
+    var selectedAgentConnection: AgentConnection? {
+        agentConnections.first { $0.runtimeID == selectedAgentRuntimeID }
+    }
+
+    var availableAgentModels: [AgentModel] {
+        selectedAgentConnection?.models ?? []
+    }
+
+    var selectedAgentModel: AgentModel? {
+        availableAgentModels.first { $0.id == selectedAgentModelID } ?? availableAgentModels.first
+    }
+
     var canDiscoverCandidateFiles: Bool {
         hasProjectRoot && currentIteration.task.isReadyForExecution
     }
 
     var canRunIteration: Bool {
-        canDiscoverCandidateFiles && selectedFileCount > 0
+        canDiscoverCandidateFiles && selectedFileCount > 0 && isAgentSelectionLocked && (selectedAgentConnection?.canExecute == true)
     }
 
     func saveIterationCheckpoint() {
@@ -165,7 +187,27 @@ final class NangaAppModel {
 
         activeProjectRootURL = folderReference.resolvedURL
         _ = activeProjectRootURL?.startAccessingSecurityScopedResource()
+        refreshAgentConnections()
         persistProject(statusMessage: "Opened project folder and saved it into project state.\(bookmarkMessage)")
+    }
+
+    func selectAgentRuntime(id: String) {
+        selectedAgentRuntimeID = id
+        syncSelectedAgentModel()
+    }
+
+    func lockSelectedAgentRuntime(id: String) {
+        selectedAgentRuntimeID = id
+        syncSelectedAgentModel()
+        isAgentSelectionLocked = true
+    }
+
+    func unlockAgentSelection() {
+        isAgentSelectionLocked = false
+    }
+
+    func selectAgentModel(id: String) {
+        selectedAgentModelID = id
     }
 
     func discoverCandidateFiles() {
@@ -242,7 +284,12 @@ final class NangaAppModel {
                 selectedFiles: selectedProject.currentIteration.scope.files,
                 carryForwardItems: carryForwardItems
             )
-            let result = try await agentRuntime.execute(executionPackage)
+            guard let runtime = agentRuntimeRegistry.runtime(for: selectedAgentRuntimeID) else {
+                persistenceStatus = "Selected agent runtime is not available."
+                return
+            }
+
+            let result = try await runtime.execute(executionPackage, in: rootURL, model: selectedAgentModel)
 
             applyExecutionResult(result, package: executionPackage)
             saveIterationCheckpoint()
@@ -392,6 +439,8 @@ final class NangaAppModel {
                 persistProject(statusMessage: "Refreshed saved project folder access.")
             }
         }
+
+        refreshAgentConnections()
     }
 
     private func stopAccessingCurrentProjectRootIfNeeded() {
@@ -401,6 +450,32 @@ final class NangaAppModel {
 
     deinit {
         activeProjectRootURL?.stopAccessingSecurityScopedResource()
+    }
+
+    private func refreshAgentConnections() {
+        let rootURL = activeProjectRootURL ?? selectedProject.rootFolder?.resolvedURL
+        agentConnections = agentRuntimeRegistry.detectConnections(at: rootURL)
+
+        if selectedAgentRuntimeID.isEmpty || !agentConnections.contains(where: { $0.runtimeID == selectedAgentRuntimeID }) {
+            if let preferred = agentConnections.first(where: { $0.status == .connected })
+                ?? agentConnections.first(where: { $0.status == .available })
+                ?? agentConnections.first {
+                selectedAgentRuntimeID = preferred.runtimeID
+            }
+        }
+
+        if let selected = selectedAgentConnection, !selected.canExecute {
+            isAgentSelectionLocked = false
+        }
+
+        syncSelectedAgentModel()
+    }
+
+    private func syncSelectedAgentModel() {
+        let models = availableAgentModels
+        if selectedAgentModelID.isEmpty || !models.contains(where: { $0.id == selectedAgentModelID }) {
+            selectedAgentModelID = models.first?.id ?? ""
+        }
     }
 }
 
