@@ -150,7 +150,9 @@ final class NangaAppModel {
         let record = IterationRecord(
             label: currentIteration.task.title,
             savedAt: .now,
-            snapshot: currentIteration.snapshot
+            summary: currentIteration.savedState.summary,
+            carriedForwardItems: currentIteration.savedState.carriedForwardItems,
+            scopedFiles: Array(currentIteration.scope.files.prefix(5))
         )
 
         mutateProject { project in
@@ -497,37 +499,22 @@ struct NangaProject: Identifiable, Equatable, Codable {
             IterationRecord(
                 label: "Define the first Nanga shell",
                 savedAt: .now.addingTimeInterval(-3_600),
-                snapshot: IterationSnapshot(
-                    task: TaskDraft(
-                        title: "Define the first Nanga shell",
-                        detail: "Establish task, signal, scope, result, and saved-state surfaces."
-                    ),
-                    signal: [
-                        SignalItem(kind: .taskIntent, title: "Iteration loop is the core unit"),
-                        SignalItem(kind: .constraint, title: "Must feel frictionless for developers")
-                    ],
-                    scope: ScopeSnapshot(
-                        surfaces: [.projectRoot, .taskInput, .signalPanel, .scopePanel, .savedIterationState, .iterationHistory],
-                        folders: ["nanga"],
-                        files: ["nanga/ContentView.swift", "nanga/NangaAppModel.swift"]
-                    ),
-                    execution: ExecutionSummary(
-                        status: .refreshed,
-                        headline: "Shell established",
-                        detail: "The app now reflects the core iteration frame."
-                    ),
-                    savedState: SavedIterationState(
-                        summary: "Saved the first product-shaped iteration frame.",
-                        carriedForwardItems: ["task intent", "signal scaffolding", "scope surfaces"]
-                    ),
-                    candidateFiles: [
-                        CandidateFile(path: "nanga/ContentView.swift", reason: "Task and UI shell are aligned here.", score: 18, isSelected: true),
-                        CandidateFile(path: "nanga/NangaAppModel.swift", reason: "Iteration state lives here.", score: 15, isSelected: true)
-                    ]
-                )
+                summary: "Saved the first product-shaped iteration frame.",
+                carriedForwardItems: ["task intent", "signal scaffolding", "scope surfaces"],
+                scopedFiles: ["nanga/ContentView.swift", "nanga/NangaAppModel.swift"]
             )
         ]
     )
+
+    func minimizedForPersistence() -> NangaProject {
+        var project = self
+        project.currentIteration = currentIteration.minimizedForPersistence()
+        project.iterationHistory = iterationHistory
+            .map { $0.minimizedForPersistence() }
+            .prefix(12)
+            .map { $0 }
+        return project
+    }
 }
 
 struct IterationState: Equatable, Codable {
@@ -542,17 +529,6 @@ struct IterationState: Equatable, Codable {
         let signalCount = signal.count
         let fileCount = scope.files.count
         return "Saving \(signalCount) signal items and \(fileCount) scoped files for the next iteration."
-    }
-
-    var snapshot: IterationSnapshot {
-        IterationSnapshot(
-            task: task,
-            signal: signal,
-            scope: scope,
-            execution: execution,
-            savedState: savedState,
-            candidateFiles: candidateFiles
-        )
     }
 
     static let sample = IterationState(
@@ -601,6 +577,17 @@ struct IterationState: Equatable, Codable {
             CandidateFile(path: "nanga/NangaAppModel.swift", reason: "Iteration state is defined here.", score: 11, isSelected: true)
         ]
     )
+
+    func minimizedForPersistence() -> IterationState {
+        IterationState(
+            task: task.minimizedForPersistence(),
+            signal: Array(signal.prefix(8)).map { $0.minimizedForPersistence() },
+            scope: scope.minimizedForPersistence(),
+            execution: execution.minimizedForPersistence(),
+            savedState: savedState.minimizedForPersistence(),
+            candidateFiles: []
+        )
+    }
 }
 
 struct TaskDraft: Equatable, Codable {
@@ -610,6 +597,13 @@ struct TaskDraft: Equatable, Codable {
     var isReadyForExecution: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func minimizedForPersistence() -> TaskDraft {
+        TaskDraft(
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            detail: detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
     }
 }
 
@@ -631,6 +625,13 @@ struct SignalItem: Identifiable, Equatable, Codable {
         self.id = id
         self.kind = kind
         self.title = title
+    }
+
+    func minimizedForPersistence() -> SignalItem {
+        SignalItem(
+            kind: kind,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
     }
 }
 
@@ -660,6 +661,14 @@ struct ScopeSnapshot: Equatable, Codable {
     var surfaces: [ScopeSurface]
     var folders: [String]
     var files: [String]
+
+    func minimizedForPersistence() -> ScopeSnapshot {
+        ScopeSnapshot(
+            surfaces: surfaces,
+            folders: [],
+            files: Array(files.prefix(12))
+        )
+    }
 }
 
 enum ScopeSurface: String, CaseIterable, Identifiable, Codable {
@@ -685,11 +694,26 @@ struct ExecutionSummary: Equatable, Codable {
     var status: Status
     var headline: String
     var detail: String
+
+    func minimizedForPersistence() -> ExecutionSummary {
+        ExecutionSummary(
+            status: status,
+            headline: headline,
+            detail: detail.isEmpty ? detail : "Stored compact execution status."
+        )
+    }
 }
 
 struct SavedIterationState: Equatable, Codable {
     var summary: String
     var carriedForwardItems: [String]
+
+    func minimizedForPersistence() -> SavedIterationState {
+        SavedIterationState(
+            summary: summary,
+            carriedForwardItems: carriedForwardItems.uniquePrefix(6)
+        )
+    }
 }
 
 struct ProjectFolderReference: Equatable, Codable {
@@ -737,18 +761,74 @@ struct IterationRecord: Identifiable, Equatable, Codable {
     let id: UUID
     var label: String
     var savedAt: Date
-    var snapshot: IterationSnapshot
+    var summary: String
+    var carriedForwardItems: [String]
+    var scopedFiles: [String]
 
     init(
         id: UUID = UUID(),
         label: String,
         savedAt: Date,
-        snapshot: IterationSnapshot
+        summary: String,
+        carriedForwardItems: [String],
+        scopedFiles: [String]
     ) {
         self.id = id
         self.label = label
         self.savedAt = savedAt
-        self.snapshot = snapshot
+        self.summary = summary
+        self.carriedForwardItems = carriedForwardItems
+        self.scopedFiles = scopedFiles
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case label
+        case savedAt
+        case summary
+        case carriedForwardItems
+        case scopedFiles
+        case snapshot
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        label = try container.decode(String.self, forKey: .label)
+        savedAt = try container.decode(Date.self, forKey: .savedAt)
+
+        if container.contains(.summary) {
+            summary = try container.decode(String.self, forKey: .summary)
+            carriedForwardItems = try container.decodeIfPresent([String].self, forKey: .carriedForwardItems) ?? []
+            scopedFiles = try container.decodeIfPresent([String].self, forKey: .scopedFiles) ?? []
+            return
+        }
+
+        let snapshot = try container.decode(IterationSnapshot.self, forKey: .snapshot)
+        summary = snapshot.savedState.summary
+        carriedForwardItems = snapshot.savedState.carriedForwardItems
+        scopedFiles = Array(snapshot.scope.files.prefix(5))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(label, forKey: .label)
+        try container.encode(savedAt, forKey: .savedAt)
+        try container.encode(summary, forKey: .summary)
+        try container.encode(carriedForwardItems, forKey: .carriedForwardItems)
+        try container.encode(scopedFiles, forKey: .scopedFiles)
+    }
+
+    func minimizedForPersistence() -> IterationRecord {
+        IterationRecord(
+            id: id,
+            label: label,
+            savedAt: savedAt,
+            summary: summary,
+            carriedForwardItems: carriedForwardItems.uniquePrefix(6),
+            scopedFiles: Array(scopedFiles.prefix(5))
+        )
     }
 }
 
@@ -759,4 +839,22 @@ struct IterationSnapshot: Equatable, Codable {
     var execution: ExecutionSummary
     var savedState: SavedIterationState
     var candidateFiles: [CandidateFile]
+}
+
+private extension Array where Element == String {
+    func uniquePrefix(_ maxCount: Int) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for value in self {
+            guard !value.isEmpty, !seen.contains(value) else { continue }
+            seen.insert(value)
+            result.append(value)
+            if result.count == maxCount {
+                break
+            }
+        }
+
+        return result
+    }
 }

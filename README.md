@@ -1,115 +1,151 @@
 # Nanga
 
-Nanga is a macOS app for agent workflows.
+Internal working note. Not for GitHub publication or external sharing unless explicitly approved.
 
-Its job is to keep each iteration anchored to the current task by pulling live signal from the work in front of you, selecting only the context that still matters, executing inside the right scope, and carrying forward only validated state into the next iteration.
+## What This Project Is
 
-Most agent workflows drift because they accumulate too much context, lose track of what is actually in scope, and force developers to restate the same task over and over. Nanga is built to reduce that drift.
+Nanga is a macOS prototype for scoped agent workflows.
 
-## What Nanga Is About
+The working idea is:
 
-Nanga is designed around a tight iteration loop:
+- select an agent surface such as `Codex`, `Claude Code`, or `Cursor`
+- define the current task
+- derive a bounded file scope from a user-approved folder
+- build a compact execution package
+- preserve only the minimum structured state needed for the next iteration
 
-1. identify the current task
-2. extract the minimum signal required to act
-3. define the active scope before execution
-4. run inside that scope
-5. inspect the resulting state
-6. refresh context from what changed
-7. preserve only what still matters for the next iteration
+`Nanga` means anchor. The internal design goal is to keep an agent workflow anchored to the current task instead of accumulating stale context.
 
-The goal is not to dump more context into an agent. The goal is to make context smaller, fresher, and more trustworthy.
+## Current User Flow
 
-Nanga should help developers:
+The app currently works like this:
 
-- reduce repeated context dumping
-- keep execution constrained to the relevant surface
-- preserve momentum across iterations
-- make scope visible before execution
-- make resulting state legible after execution
-- resume work without rebuilding context manually
+1. Launch the app.
+2. Select an agent on the landing screen.
+3. Lock into that agent surface.
+4. Open a project folder that the user explicitly chooses.
+5. Enter a task title.
+6. Enter execution intent/detail.
+7. Run `Discover` to scan the approved folder and propose candidate files.
+8. Adjust the selected scope.
+9. Run the iteration.
+10. Build an `ExecutionPackage` from the task, signal, and selected files.
+11. Pass that package through the selected runtime adapter.
+12. Persist the resulting structured iteration state locally.
 
-## Open Source and Paid Product
+Important current limitation:
 
-Nanga is intended to be both an open-source concept and a paid macOS product.
+- runtime selection is real
+- runtime execution is still mocked
+- the app does not yet perform a real Codex/Claude/Cursor execution handoff
 
-The open-source GitHub repository should make the core idea real and inspectable. It can include the architecture, signal model, workflow philosophy, and selected core implementation pieces so people can understand how Nanga works and build on the underlying approach.
+## Intended Flow
 
-The paid macOS app is the polished operator surface. That is where the product experience lives: project management, task input, signal and scope panels, saved iteration state, refresh flows, integrated agent workflows, exports, and the UI/UX work that makes Nanga feel reliable in day-to-day use.
+The intended end-state is:
 
-In short:
+1. User opens an approved working folder.
+2. Nanga detects which supported agent surfaces are available.
+3. User selects an agent.
+4. User states the task.
+5. Nanga reads only the approved workspace surface.
+6. Nanga derives signal and scope.
+7. Nanga builds a bounded execution package.
+8. The selected agent executes inside that package.
+9. Nanga refreshes from the result.
+10. Nanga carries forward only the state that still matters.
 
-- open source explains the model and exposes core building blocks
-- the macOS app delivers the premium workflow experience
+## Privacy And Data Minimization
 
-This split keeps the idea open while making the product worth paying for.
+This prototype should store only the minimum structured context needed for the feature.
 
-## What Belongs in the GitHub Repo
+It should not:
 
-The repository can responsibly expose:
+- collect unrelated user data
+- add analytics
+- add telemetry
+- add remote logging
+- add training capture
+- add background collection
+- scan beyond user-approved files or folders
 
-- the workflow philosophy behind scoped agent execution
-- the signal and scope model
-- architecture and implementation details
-- core runtime or engine pieces
-- a CLI or basic execution surface
-- enough real implementation to prove the system is not conceptual vapor
+Preferred persistence model:
 
-The repo should help people understand:
+- structured summaries over raw content
+- selected file paths over broad content dumps
+- compact carry-forward state over full transcripts
 
-- how Nanga reduces drift
-- how scope is derived
-- how refresh should work after execution
-- how useful iteration state can be preserved without keeping stale context
+If raw content is ever stored, it should be tightly scoped, explicitly justified, and easy to inspect.
 
-## What To Borrow, What To Avoid
+## What Is Currently Persisted
 
-Nanga can learn useful lessons from agent frameworks such as `Swarm`, but it should stay narrower and more product-driven.
+Current local persistence includes:
 
-What to borrow:
+- selected project metadata
+- project root bookmark/reference
+- current task draft
+- signal items
+- selected scope files and folders
+- execution summary
+- saved iteration state
+- iteration history snapshots
+- selected agent runtime and model
 
-- a structured workspace contract for instructions, skills, memory, and iteration artifacts
-- validation before execution so malformed state is caught early
-- resumable iteration state instead of fragile one-shot runs
-- deterministic scenario testing for run, refresh, carry-forward, and resume behavior
-- Swift-native runtime discipline
+This is still broader than the target minimization standard. In particular, iteration history snapshots should likely be reduced over time so the app retains less raw structured state by default.
 
-What to avoid:
+## Tech Stack
 
-- turning Nanga into a broad orchestration framework
-- adding workflow modes and provider abstractions before the core app loop is excellent
-- expanding memory and agent features faster than the product can make them legible
+Current implementation uses:
 
-Nanga should borrow runtime rigor, not framework sprawl.
+- `Swift`
+- `SwiftUI`
+- `Observation` with `@Observable`
+- `async/await`
+- JSON persistence on disk
+- security-scoped bookmarks for user-selected folders
+- local runtime adapters for supported agent surfaces
 
-## What People Pay For
+Current agent surfaces modeled in the app:
 
-The paid macOS app should be the best way to actually use Nanga.
+- `Codex`
+- `Claude Code`
+- `Cursor`
 
-That includes:
+## Main Files
 
-- polished project and workspace management
-- a high-quality task input flow
-- signal and scope panels that make execution boundaries obvious
-- saved iteration state that makes resuming frictionless
-- visual refresh and resulting-state inspection
-- agent integrations and productized runtime behavior
-- refined macOS-native UX, performance, and reliability
+- [nanga/ContentView.swift](nanga/ContentView.swift)
+  Main macOS UI, landing flow, and locked agent workspace.
+- [nanga/NangaAppModel.swift](nanga/NangaAppModel.swift)
+  Main app state, iteration flow, persistence wiring, and discovery orchestration.
+- [nanga/AgentRuntime.swift](nanga/AgentRuntime.swift)
+  Runtime protocol, registry, runtime detection, and current mock execution adapters.
+- [nanga/ProjectStore.swift](nanga/ProjectStore.swift)
+  Local JSON persistence for project state.
+- [nanga/ExecutionPackage.swift](nanga/ExecutionPackage.swift)
+  Bounded execution package model.
+- [nanga/ExecutionPackageBuilder.swift](nanga/ExecutionPackageBuilder.swift)
+  Package construction from current task, signal, and scope.
 
-The value is not just raw functionality. The value is a tool that feels tight, dependable, and fast enough to stay in the loop every day.
+## Current Status
 
-## Product Direction
+Implemented:
 
-Nanga is opinionated about how agent workflows should work:
+- agent selection and lock-in flow
+- project folder import
+- task input
+- candidate file discovery
+- selected scope management
+- local persistence
+- compact package construction
+- runtime adapter selection
 
-- scope should be visible before execution
-- only current signal should shape the next action
-- resulting state should be easier to understand than the raw execution trace
-- iteration memory should be structured, not dumped
-- developers should not need to reconstruct context on every pass
+Not implemented yet:
 
-If a feature adds ceremony, broadens scope without explanation, or preserves stale state, it is probably moving Nanga in the wrong direction.
+- real runtime execution through Codex, Claude Code, or Cursor
+- stronger scope derivation
+- result-driven signal refresh from real agent artifacts
+- tighter minimal-memory persistence model
+- final UI direction
 
-## Status
+## Distribution Note
 
-This repository contains the foundations of Nanga as it is being built. The long-term direction is an open core around scoped agent execution and a paid macOS app that turns that core into a polished daily workflow tool.
+Do not publish this README to GitHub or treat it as public-facing product copy unless explicitly approved.

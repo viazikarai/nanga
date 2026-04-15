@@ -32,7 +32,7 @@ struct ProjectStore {
     }
 
     func saveProject(_ project: NangaProject) throws {
-        let data = try encoder.encode(project)
+        let data = try encoder.encode(project.minimizedForPersistence())
         let directoryURL = projectFileURL.deletingLastPathComponent()
 
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)

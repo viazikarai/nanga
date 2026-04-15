@@ -69,6 +69,7 @@ struct ContentView: View {
             theme.baseBackground
                 .ignoresSafeArea()
 
+            techGridOverlay
             selectionBackgroundGlow
 
             VStack(spacing: 0) {
@@ -123,10 +124,10 @@ struct ContentView: View {
                 .padding(36)
                 .background(theme.heroPanelBackground)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    HUDFrameShape(cut: 24)
                         .stroke(theme.heroPanelStroke, lineWidth: 1)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .clipShape(HUDFrameShape(cut: 24))
                 .shadow(color: theme.heroShadow, radius: 28, x: 0, y: 18)
                 .padding(.horizontal, 32)
                 .scaleEffect(selectionHeroVisible ? 1 : 0.985)
@@ -214,13 +215,13 @@ struct ContentView: View {
                     Button("Change Agent") {
                         appModel.unlockAgentSelection()
                     }
-                    .buttonStyle(ConsoleButtonStyle(tint: theme.gold))
+                    .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
                     .frame(width: 140)
                 }
             }
 
             HStack(spacing: 10) {
-                consoleBadge(project.name.uppercased(), tint: theme.gold)
+                consoleBadge(project.name.uppercased(), tint: theme.cyanMuted)
                 consoleBadge(agent.runtimeName.uppercased(), tint: theme.cyan)
                 consoleBadge(agent.status.label.uppercased(), tint: agent.statusTint(in: theme))
             }
@@ -228,6 +229,12 @@ struct ContentView: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
         .background(theme.sidebarBackground)
+        .overlay(alignment: .bottomLeading) {
+            Rectangle()
+                .fill(theme.cyanGlow.opacity(0.45))
+                .frame(width: 96, height: 1)
+                .padding(.leading, 24)
+        }
     }
 
     private func topCommandSurface(iteration: IterationState) -> some View {
@@ -277,7 +284,7 @@ struct ContentView: View {
                         Button("Open Folder") {
                             isImportingProjectRoot = true
                         }
-                        .buttonStyle(ConsoleButtonStyle(tint: theme.gold))
+                        .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
 
                         Button("Discover") {
                             appModel.discoverCandidateFiles()
@@ -301,8 +308,8 @@ struct ContentView: View {
                         consoleBadge("\(selectedAgent.runtimeName.uppercased()) CONNECTED", tint: appModel.isAgentSelectionLocked ? theme.cyanGlow : theme.cyan)
                         consoleBadge(selectedAgent.status.label.uppercased(), tint: selectedAgent.statusTint(in: theme))
                     }
-                    consoleBadge(appModel.hasProjectRoot ? "PROJECT ONLINE" : "PROJECT REQUIRED", tint: appModel.hasProjectRoot ? theme.cyan : theme.gold)
-                    consoleBadge(iteration.task.isReadyForExecution ? "TASK READY" : "TASK INCOMPLETE", tint: iteration.task.isReadyForExecution ? theme.cyan : theme.gold)
+                    consoleBadge(appModel.hasProjectRoot ? "PROJECT ONLINE" : "PROJECT REQUIRED", tint: appModel.hasProjectRoot ? theme.cyan : theme.cyanMuted)
+                    consoleBadge(iteration.task.isReadyForExecution ? "TASK READY" : "TASK INCOMPLETE", tint: iteration.task.isReadyForExecution ? theme.cyan : theme.cyanMuted)
                     consoleBadge("\(iteration.candidateFiles.count) CANDIDATES", tint: theme.cyanMuted)
                     consoleBadge("\(appModel.selectedFileCount) IN SCOPE", tint: theme.cyanMuted)
                 }
@@ -400,7 +407,7 @@ struct ContentView: View {
                         title: "Persistence",
                         body: appModel.persistenceStatus,
                         detail: appModel.projectFilePath,
-                        tint: theme.gold
+                        tint: theme.cyanMuted
                     )
                 }
 
@@ -416,7 +423,7 @@ struct ContentView: View {
                         title: "Next Iteration",
                         body: iteration.savedState.summary,
                         detail: iteration.savedState.carriedForwardItems.joined(separator: " • "),
-                        tint: theme.gold
+                        tint: theme.cyanMuted
                     )
                 }
             }
@@ -438,16 +445,23 @@ struct ContentView: View {
         }
         .padding(18)
         .background(theme.panelBackground)
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(theme.border, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .shadow(color: theme.shadow, radius: 14, x: 0, y: 6)
+        .overlay(HUDFrameShape(cut: 14).stroke(theme.border, lineWidth: 1))
+        .overlay(alignment: .topTrailing) {
+            Rectangle()
+                .fill(theme.cyan.opacity(0.7))
+                .frame(width: 44, height: 1)
+                .padding(.top, 10)
+                .padding(.trailing, 12)
+        }
+        .clipShape(HUDFrameShape(cut: 14))
+        .shadow(color: theme.shadow, radius: 16, x: 0, y: 8)
     }
 
     private func sidebarSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(theme.gold)
+                .foregroundStyle(theme.cyanMuted)
             content()
         }
     }
@@ -509,10 +523,17 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
             .background(theme.agentButtonBackground(connection: connection))
             .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                HUDFrameShape(cut: 18)
                     .stroke(theme.agentButtonStroke(connection: connection), lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(alignment: .bottomLeading) {
+                Rectangle()
+                    .fill(connection.statusTint(in: theme).opacity(0.85))
+                    .frame(width: 64, height: 2)
+                    .padding(.leading, 18)
+                    .padding(.bottom, 16)
+            }
+            .clipShape(HUDFrameShape(cut: 18))
             .shadow(color: theme.agentButtonShadow(connection: connection), radius: 16, x: 0, y: 10)
         }
         .buttonStyle(.plain)
@@ -542,9 +563,10 @@ struct ContentView: View {
                 .fill(theme.logoPlateBackground(connection: connection))
                 .frame(width: 52, height: 52)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    HUDFrameShape(cut: 10)
                         .stroke(theme.logoPlateStroke(connection: connection), lineWidth: 1)
                 )
+                .clipShape(HUDFrameShape(cut: 10))
 
             switch connection.runtimeID {
             case "codex":
@@ -585,8 +607,8 @@ struct ContentView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(theme.raisedBackground)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(theme.border, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(HUDFrameShape(cut: 10).stroke(theme.border, lineWidth: 1))
+        .clipShape(HUDFrameShape(cut: 10))
     }
 
     private func consoleEmpty(_ text: String) -> some View {
@@ -596,15 +618,15 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
             .background(theme.raisedBackground)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(HUDFrameShape(cut: 8).stroke(theme.border, lineWidth: 1))
+            .clipShape(HUDFrameShape(cut: 8))
     }
 
     private func scopeRow(_ value: String, symbol: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
                 .font(.system(size: 12))
-                .foregroundStyle(theme.gold)
+                .foregroundStyle(theme.cyanMuted)
             Text(value)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(theme.primaryText)
@@ -614,14 +636,14 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(theme.raisedBackground)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(HUDFrameShape(cut: 8).stroke(theme.border, lineWidth: 1))
+        .clipShape(HUDFrameShape(cut: 8))
     }
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text.uppercased())
             .font(.system(size: 11, weight: .bold, design: .monospaced))
-            .foregroundStyle(theme.gold)
+            .foregroundStyle(theme.cyanMuted)
     }
 
     private func consoleBadge(_ title: String, tint: Color) -> some View {
@@ -673,7 +695,7 @@ struct ContentView: View {
                 .offset(x: selectionBackgroundPulse ? -280 : -220, y: selectionBackgroundPulse ? -220 : -170)
 
             Circle()
-                .fill(theme.gold.opacity(activeColorScheme == .dark ? 0.08 : 0.06))
+                .fill(theme.cyanMuted.opacity(activeColorScheme == .dark ? 0.10 : 0.06))
                 .frame(width: 320, height: 320)
                 .blur(radius: 32)
                 .offset(x: selectionBackgroundPulse ? 310 : 250, y: selectionBackgroundPulse ? 200 : 150)
@@ -696,12 +718,31 @@ struct ContentView: View {
                 .padding(.vertical, 12)
                 .background(isFocused ? theme.focusedInputBackground : theme.inputBackground)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    HUDFrameShape(cut: 10)
                         .stroke(isFocused ? theme.cyan.opacity(0.9) : theme.cyan.opacity(0.45), lineWidth: 1)
                 )
                 .shadow(color: theme.cyan.opacity(isFocused ? 0.28 : 0.16), radius: isFocused ? 16 : 10, x: 0, y: 0)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(HUDFrameShape(cut: 10))
         }
+    }
+
+    private var techGridOverlay: some View {
+        ZStack {
+            GridPattern(spacing: 28)
+                .stroke(theme.gridLine, lineWidth: 0.6)
+                .opacity(activeColorScheme == .dark ? 0.20 : 0.10)
+
+            LinearGradient(
+                colors: [
+                    theme.baseBackground.opacity(0.02),
+                    theme.baseBackground.opacity(0.38),
+                    theme.baseBackground.opacity(0.04)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
     }
 
 }
@@ -728,7 +769,7 @@ private extension AgentConnection {
         case .connected:
             theme.cyan
         case .available:
-            theme.gold
+            theme.cyanMuted
         case .unavailable:
             theme.secondaryText
         }
@@ -757,31 +798,33 @@ private struct ConsoleTheme {
     let heroPanelBackground: Color
     let heroPanelStroke: Color
     let heroShadow: Color
+    let gridLine: Color
 
     init(colorScheme: ColorScheme) {
         isDarkMode = colorScheme == .dark
-        cyan = Color(red: 0.0, green: 0.56, blue: 0.70)
-        cyanGlow = Color(red: 0.39, green: 0.90, blue: 1.0)
-        cyanMuted = Color(red: 0.12, green: 0.47, blue: 0.58)
-        gold = Color(red: 0.71, green: 0.50, blue: 0.16)
+        cyan = Color(red: 0.09, green: 0.70, blue: 0.86)
+        cyanGlow = Color(red: 0.50, green: 0.93, blue: 1.0)
+        cyanMuted = Color(red: 0.10, green: 0.42, blue: 0.56)
+        gold = Color(red: 0.34, green: 0.76, blue: 0.92)
 
         if colorScheme == .dark {
-            baseBackground = Color(red: 0.03, green: 0.05, blue: 0.09)
-            sidebarBackground = Color(red: 0.04, green: 0.06, blue: 0.10)
-            panelBackground = Color(red: 0.05, green: 0.08, blue: 0.13)
-            raisedBackground = Color(red: 0.07, green: 0.10, blue: 0.16)
-            agentPanelBackground = Color(red: 0.04, green: 0.09, blue: 0.14)
-            inputBackground = Color(red: 0.04, green: 0.07, blue: 0.12)
-            focusedInputBackground = Color(red: 0.05, green: 0.10, blue: 0.17)
-            selectionBackground = Color(red: 0.05, green: 0.14, blue: 0.18)
-            border = Color(red: 0.16, green: 0.22, blue: 0.30)
-            primaryText = Color(red: 0.86, green: 0.92, blue: 0.97)
-            secondaryText = Color(red: 0.54, green: 0.63, blue: 0.72)
-            placeholderText = Color(red: 0.36, green: 0.49, blue: 0.60)
-            shadow = Color(red: 0.0, green: 0.9, blue: 1.0).opacity(0.08)
-            heroPanelBackground = Color(red: 0.05, green: 0.08, blue: 0.13).opacity(0.92)
-            heroPanelStroke = cyan.opacity(0.30)
-            heroShadow = cyanGlow.opacity(0.10)
+            baseBackground = Color(red: 0.02, green: 0.03, blue: 0.06)
+            sidebarBackground = Color(red: 0.03, green: 0.05, blue: 0.08)
+            panelBackground = Color(red: 0.04, green: 0.06, blue: 0.10)
+            raisedBackground = Color(red: 0.06, green: 0.09, blue: 0.14)
+            agentPanelBackground = Color(red: 0.04, green: 0.08, blue: 0.12)
+            inputBackground = Color(red: 0.03, green: 0.06, blue: 0.10)
+            focusedInputBackground = Color(red: 0.05, green: 0.11, blue: 0.17)
+            selectionBackground = Color(red: 0.05, green: 0.15, blue: 0.20)
+            border = Color(red: 0.18, green: 0.28, blue: 0.38)
+            primaryText = Color(red: 0.90, green: 0.95, blue: 0.98)
+            secondaryText = Color(red: 0.52, green: 0.62, blue: 0.72)
+            placeholderText = Color(red: 0.33, green: 0.46, blue: 0.57)
+            shadow = Color(red: 0.08, green: 0.82, blue: 1.0).opacity(0.12)
+            heroPanelBackground = Color(red: 0.04, green: 0.07, blue: 0.11).opacity(0.94)
+            heroPanelStroke = cyanGlow.opacity(0.34)
+            heroShadow = cyanGlow.opacity(0.14)
+            gridLine = cyan.opacity(0.28)
         } else {
             baseBackground = Color(red: 0.95, green: 0.97, blue: 0.99)
             sidebarBackground = Color(red: 0.92, green: 0.95, blue: 0.98)
@@ -799,6 +842,7 @@ private struct ConsoleTheme {
             heroPanelBackground = Color(red: 0.98, green: 0.99, blue: 1.0).opacity(0.96)
             heroPanelStroke = cyan.opacity(0.24)
             heroShadow = Color(red: 0.10, green: 0.36, blue: 0.54).opacity(0.08)
+            gridLine = cyan.opacity(0.18)
         }
     }
 
@@ -816,8 +860,8 @@ private struct ConsoleTheme {
         case .available:
             LinearGradient(
                 colors: [
-                    Color(red: 0.12, green: 0.10, blue: 0.14),
-                    Color(red: 0.07, green: 0.08, blue: 0.13)
+                    Color(red: 0.07, green: 0.11, blue: 0.17),
+                    Color(red: 0.04, green: 0.08, blue: 0.14)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -840,8 +884,8 @@ private struct ConsoleTheme {
             )
         case .available:
             colorSchemeAware(
-                dark: Color(red: 0.09, green: 0.09, blue: 0.13),
-                light: Color(red: 0.98, green: 0.97, blue: 0.94)
+                dark: Color(red: 0.06, green: 0.10, blue: 0.15),
+                light: Color(red: 0.92, green: 0.97, blue: 0.99)
             )
         case .unavailable:
             raisedBackground
@@ -853,7 +897,7 @@ private struct ConsoleTheme {
         case .connected:
             cyanGlow.opacity(0.42)
         case .available:
-            gold.opacity(0.30)
+            cyanMuted.opacity(0.34)
         case .unavailable:
             border
         }
@@ -864,7 +908,7 @@ private struct ConsoleTheme {
         case .connected:
             cyanGlow.opacity(0.16)
         case .available:
-            gold.opacity(0.08)
+            cyan.opacity(0.08)
         case .unavailable:
             shadow
         }
@@ -879,8 +923,8 @@ private struct ConsoleTheme {
             )
         case .available:
             colorSchemeAware(
-                dark: Color(red: 0.11, green: 0.10, blue: 0.14),
-                light: Color(red: 0.99, green: 0.97, blue: 0.92)
+                dark: Color(red: 0.05, green: 0.10, blue: 0.15),
+                light: Color(red: 0.89, green: 0.96, blue: 0.99)
             )
         case .unavailable:
             raisedBackground
@@ -892,7 +936,7 @@ private struct ConsoleTheme {
         case .connected:
             cyan.opacity(0.42)
         case .available:
-            gold.opacity(0.34)
+            cyanMuted.opacity(0.34)
         case .unavailable:
             border
         }
@@ -903,7 +947,7 @@ private struct ConsoleTheme {
         case .connected:
             cyanGlow.opacity(0.55)
         case .available:
-            gold.opacity(0.42)
+            cyanMuted.opacity(0.42)
         case .unavailable:
             border
         }
@@ -914,7 +958,7 @@ private struct ConsoleTheme {
         case .connected:
             cyanGlow.opacity(0.18)
         case .available:
-            gold.opacity(0.10)
+            cyan.opacity(0.10)
         case .unavailable:
             shadow
         }
@@ -942,6 +986,50 @@ private struct AgentCloudShape: Shape {
     }
 }
 
+private struct HUDFrameShape: Shape {
+    var cut: CGFloat = 14
+
+    func path(in rect: CGRect) -> Path {
+        let cut = min(cut, min(rect.width, rect.height) * 0.25)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + cut, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + cut))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cut))
+        path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + cut, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - cut))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + cut))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct GridPattern: Shape {
+    var spacing: CGFloat = 28
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard spacing > 0 else { return path }
+
+        var x = rect.minX
+        while x <= rect.maxX {
+            path.move(to: CGPoint(x: x, y: rect.minY))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY))
+            x += spacing
+        }
+
+        var y = rect.minY
+        while y <= rect.maxY {
+            path.move(to: CGPoint(x: rect.minX, y: y))
+            path.addLine(to: CGPoint(x: rect.maxX, y: y))
+            y += spacing
+        }
+
+        return path
+    }
+}
+
 private struct ConsoleButtonStyle: ButtonStyle {
     let tint: Color
 
@@ -953,8 +1041,8 @@ private struct ConsoleButtonStyle: ButtonStyle {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(tint.opacity(configuration.isPressed ? 0.22 : 0.14))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(tint.opacity(0.45), lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(HUDFrameShape(cut: 8).stroke(tint.opacity(0.45), lineWidth: 1))
+            .clipShape(HUDFrameShape(cut: 8))
             .shadow(color: tint.opacity(configuration.isPressed ? 0.0 : 0.14), radius: 8, x: 0, y: 0)
     }
 }
