@@ -20,7 +20,7 @@ Use this order when a task changes behavior, structure, state, persistence, refr
 4. define what is out of scope
 5. compare options if there is a real choice
 6. make the change
-7. run `./scripts/agents_stat.sh` and resolve all `error:` findings before review
+7. run `./scripts/agents_stat.sh` and `./scripts/architecture_stat.sh`, then resolve all findings before review
 8. review the result
 9. extract the lesson
 
