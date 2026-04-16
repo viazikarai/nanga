@@ -19,16 +19,35 @@ enum AgentConnectionStatus: Equatable {
     }
 }
 
+enum AgentAuthenticationStatus: Equatable {
+    case loggedIn
+    case loginRequired
+    case notRequired
+    case unknown
+
+    var label: String {
+        switch self {
+        case .loggedIn: "Logged In"
+        case .loginRequired: "Login Required"
+        case .notRequired: "Not Required"
+        case .unknown: "Unknown"
+        }
+    }
+}
+
 struct AgentConnection: Identifiable, Equatable {
     var id: String { runtimeID }
     var runtimeID: String
     var runtimeName: String
     var status: AgentConnectionStatus
+    var isCLIInstalled: Bool
+    var authenticationStatus: AgentAuthenticationStatus
+    var workspaceMarkers: [String]
     var detail: String
     var models: [AgentModel]
 
     var canExecute: Bool {
-        status != .unavailable
+        status != .unavailable && authenticationStatus != .loginRequired
     }
 }
 
@@ -109,17 +128,25 @@ struct CodexRuntime: AgentRuntime {
                 runtimeID: id,
                 runtimeName: displayName,
                 status: .unavailable,
+                isCLIInstalled: false,
+                authenticationStatus: .unknown,
+                workspaceMarkers: [],
                 detail: "Codex CLI was not found on this machine.",
                 models: models
             )
         }
 
-        guard let loginStatus = CLIWorkspaceDetector.codexLoginStatus() else {
+        let loginStatus = CLIWorkspaceDetector.codexLoginStatus()
+
+        guard case .loggedIn(let loginDetail) = loginStatus else {
             return AgentConnection(
                 runtimeID: id,
                 runtimeName: displayName,
                 status: .available,
-                detail: "Codex CLI is installed, but login is required before Nanga can execute against the project.",
+                isCLIInstalled: true,
+                authenticationStatus: .loginRequired,
+                workspaceMarkers: [],
+                detail: "Codex CLI is installed, but login is required. Run `codex login`, then re-link from Nanga.",
                 models: models
             )
         }
@@ -129,7 +156,10 @@ struct CodexRuntime: AgentRuntime {
                 runtimeID: id,
                 runtimeName: displayName,
                 status: .available,
-                detail: "\(loginStatus). Open a project folder to attach it.",
+                isCLIInstalled: true,
+                authenticationStatus: .loggedIn,
+                workspaceMarkers: [],
+                detail: "\(loginDetail). Open a project folder to attach it.",
                 models: models
             )
         }
@@ -140,13 +170,16 @@ struct CodexRuntime: AgentRuntime {
         )
 
         let detail = markers.isEmpty
-            ? "\(loginStatus). Codex is ready to attach to this folder."
-            : "\(loginStatus). Ready to attach in this folder. Workspace markers: \(markers.joined(separator: ", "))"
+            ? "\(loginDetail). Codex is ready to attach to this folder."
+            : "\(loginDetail). Ready to attach in this folder. Workspace markers: \(markers.joined(separator: ", "))"
 
         return AgentConnection(
             runtimeID: id,
             runtimeName: displayName,
             status: .available,
+            isCLIInstalled: true,
+            authenticationStatus: .loggedIn,
+            workspaceMarkers: markers,
             detail: detail,
             models: models
         )
@@ -264,6 +297,9 @@ private enum CLIWorkspaceDetector {
                 runtimeID: runtimeID,
                 runtimeName: runtimeName,
                 status: .unavailable,
+                isCLIInstalled: false,
+                authenticationStatus: .unknown,
+                workspaceMarkers: [],
                 detail: "\(runtimeName) CLI was not found on this machine.",
                 models: models
             )
@@ -274,6 +310,9 @@ private enum CLIWorkspaceDetector {
                 runtimeID: runtimeID,
                 runtimeName: runtimeName,
                 status: .available,
+                isCLIInstalled: true,
+                authenticationStatus: .notRequired,
+                workspaceMarkers: [],
                 detail: "\(runtimeName) is installed. Open a project to attach it.",
                 models: models
             )
@@ -286,6 +325,9 @@ private enum CLIWorkspaceDetector {
                 runtimeID: runtimeID,
                 runtimeName: runtimeName,
                 status: .available,
+                isCLIInstalled: true,
+                authenticationStatus: .notRequired,
+                workspaceMarkers: [],
                 detail: "\(runtimeName) is installed. No explicit workspace marker was detected in this folder.",
                 models: models
             )
@@ -294,8 +336,11 @@ private enum CLIWorkspaceDetector {
         return AgentConnection(
             runtimeID: runtimeID,
             runtimeName: runtimeName,
-            status: .connected,
-            detail: "Detected workspace markers: \(markers.joined(separator: ", "))",
+            status: .available,
+            isCLIInstalled: true,
+            authenticationStatus: .notRequired,
+            workspaceMarkers: markers,
+            detail: "Detected workspace markers: \(markers.joined(separator: ", ")). Ready to attach.",
             models: models
         )
     }
@@ -304,13 +349,18 @@ private enum CLIWorkspaceDetector {
         resolvedCommandURL(command) != nil
     }
 
-    static func codexLoginStatus() -> String? {
+    enum CodexLoginState: Equatable {
+        case loggedIn(String)
+        case loginRequired
+    }
+
+    static func codexLoginStatus() -> CodexLoginState {
         guard let output = commandOutput(arguments: ["codex", "login", "status"]),
               output.localizedCaseInsensitiveContains("logged in") else {
-            return nil
+            return .loginRequired
         }
 
-        return output
+        return .loggedIn(output)
     }
 
     static func detectWorkspaceMarkers(at rootURL: URL, workspaceMarkers: [String]) -> [String] {

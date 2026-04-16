@@ -454,7 +454,7 @@ struct ContentView: View {
                 }
 
                 outputBlock(
-                    title: "Codex Runtime",
+                    title: "\(appModel.selectedRuntimeName) Runtime",
                     body: appModel.agentFeedText,
                     detail: runtimeExecutionDetail,
                     tint: theme.cyanMuted,
@@ -590,8 +590,11 @@ struct ContentView: View {
 
         switch connection.status {
         case .connected:
-            return "Ready in this workspace."
+            return "Attached to an active thread in this workspace."
         case .available:
+            if connection.authenticationStatus == .loginRequired {
+                return "Installed, but login is required before attach."
+            }
             return "Installed and ready to attach."
         case .unavailable:
             return "Not installed on this machine."
@@ -665,27 +668,81 @@ struct ContentView: View {
     }
 
     private var runtimeLinkStrip: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("AGENT LINK")
+        VStack(alignment: .leading, spacing: 10) {
+            Text("NANGA ↔ \(appModel.selectedRuntimeName.uppercased())")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(theme.gold)
+
+            HStack(spacing: 8) {
+                runtimeStatusChip(
+                    title: "CLI",
+                    value: appModel.selectedRuntimeInstallState,
+                    tint: appModel.selectedRuntimeInstallState == "Installed" ? theme.cyan : theme.secondaryText
+                )
+                runtimeStatusChip(
+                    title: "LOGIN",
+                    value: appModel.selectedRuntimeAuthenticationState,
+                    tint: appModel.selectedRuntimeAuthenticationState == "Logged In" ? theme.cyan : theme.gold
+                )
+                runtimeStatusChip(
+                    title: "ATTACH",
+                    value: appModel.selectedRuntimeAttachState,
+                    tint: appModel.selectedRuntimeAttachState == "Attached" ? theme.cyanGlow : theme.cyanMuted
+                )
+            }
+            .fixedSize(horizontal: false, vertical: true)
+
+            if let sessionID = appModel.selectedAgentSessionID {
+                Text("thread_id \(sessionID)")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(theme.cyanGlow)
+                    .textSelection(.enabled)
+            }
+
+            if !appModel.selectedRuntimeWorkspaceMarkers.isEmpty {
+                Text("Markers: \(appModel.selectedRuntimeWorkspaceMarkers.joined(separator: ", "))")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(theme.secondaryText)
+                    .lineLimit(2)
+            }
+
+            Text("Last event: \(appModel.latestAgentEventMessage)")
+                .font(.system(size: 11))
+                .foregroundStyle(theme.secondaryText)
+                .lineLimit(2)
+
+            if let lastRuntimeError = appModel.lastRuntimeError {
+                Text("Last error: \(lastRuntimeError)")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.red)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
+            }
 
             Text(appModel.selectedAgentConnection?.detail ?? "No agent selected.")
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(theme.primaryText)
                 .textSelection(.enabled)
 
-            if let sessionID = appModel.selectedAgentSessionID {
-                Text("Thread \(sessionID)")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(theme.cyan)
-                    .textSelection(.enabled)
-            }
+            if appModel.requiresSelectedRuntimeLogin && appModel.selectedAgentRuntimeID == "codex" {
+                HStack(spacing: 10) {
+                    Button("Log In to Codex") {
+                        appModel.launchCodexLoginInTerminal()
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tint: theme.gold))
+                    .disabled(!appModel.canLaunchCodexLogin)
 
-            Text(appModel.liveAgentEvents.last?.message ?? "No live runtime events yet.")
-                .font(.system(size: 11))
-                .foregroundStyle(theme.secondaryText)
-                .lineLimit(2)
+                    Button("Verify Login") {
+                        appModel.refreshSelectedAgentConnectionState()
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
+                }
+
+                Text("Nanga opens Terminal and runs `codex login --device-auth`. Finish auth there, then verify here.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.secondaryText)
+                    .lineLimit(2)
+            }
 
             HStack(spacing: 10) {
                 Button("Link Now") {
@@ -694,7 +751,7 @@ struct ContentView: View {
                     }
                 }
                 .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
-                .disabled(!appModel.isAgentSelectionLocked || !appModel.hasProjectRoot)
+                .disabled(!appModel.isAgentSelectionLocked || !appModel.hasProjectRoot || appModel.requiresSelectedRuntimeLogin)
 
                 Button("Re-link") {
                     Task {
@@ -702,7 +759,7 @@ struct ContentView: View {
                     }
                 }
                 .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
-                .disabled(!appModel.isAgentSelectionLocked || !appModel.hasProjectRoot)
+                .disabled(!appModel.isAgentSelectionLocked || !appModel.hasProjectRoot || appModel.requiresSelectedRuntimeLogin)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -716,7 +773,29 @@ struct ContentView: View {
         if let sessionID = appModel.selectedAgentSessionID {
             return "Attached to thread \(sessionID)"
         }
+        if let runtimeError = appModel.lastRuntimeError {
+            return "Last attach/run error: \(runtimeError)"
+        }
         return appModel.selectedAgentConnection?.detail ?? "No runtime selected."
+    }
+
+    private func runtimeStatusChip(title: String, value: String, tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(theme.secondaryText)
+            Text(value.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(tint)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(tint.opacity(0.12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 999)
+                .stroke(tint.opacity(0.35), lineWidth: 1)
+        )
+        .clipShape(Capsule())
     }
 
     private func outputBlock(title: String, body: String, detail: String, tint: Color, monospaced: Bool = false) -> some View {
@@ -791,7 +870,7 @@ struct ContentView: View {
         case .connected:
             "ATTACHED"
         case .available:
-            "READY"
+            agent.authenticationStatus == .loginRequired ? "LOGIN REQUIRED" : "READY"
         case .unavailable:
             "OFFLINE"
         }
@@ -909,7 +988,7 @@ private extension AgentConnection {
         case .connected:
             theme.cyan
         case .available:
-            theme.cyanMuted
+            authenticationStatus == .loginRequired ? theme.gold : theme.cyanMuted
         case .unavailable:
             theme.secondaryText
         }

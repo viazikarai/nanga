@@ -17,6 +17,7 @@ final class NangaAppModel {
     var selectedAgentModelID: String
     var isAgentSelectionLocked: Bool
     var liveAgentEvents: [AgentRuntimeEvent]
+    var lastRuntimeError: String?
 
     convenience init() {
         self.init(
@@ -44,6 +45,7 @@ final class NangaAppModel {
         self.selectedAgentModelID = ""
         self.isAgentSelectionLocked = selectedProject?.isAgentSelectionLocked ?? false
         self.liveAgentEvents = []
+        self.lastRuntimeError = nil
         self.persistenceStatus = ""
 
         if let selectedProject {
@@ -162,6 +164,50 @@ final class NangaAppModel {
         activeSessionID(for: selectedAgentRuntimeID)
     }
 
+    var selectedRuntimeName: String {
+        selectedAgentConnection?.runtimeName ?? "Agent"
+    }
+
+    var selectedRuntimeInstallState: String {
+        guard let connection = selectedAgentConnection else {
+            return "Unknown"
+        }
+        return connection.isCLIInstalled ? "Installed" : "Not Installed"
+    }
+
+    var selectedRuntimeAuthenticationState: String {
+        selectedAgentConnection?.authenticationStatus.label ?? "Unknown"
+    }
+
+    var requiresSelectedRuntimeLogin: Bool {
+        selectedAgentConnection?.authenticationStatus == .loginRequired
+    }
+
+    var selectedRuntimeAttachState: String {
+        guard let connection = selectedAgentConnection else {
+            return "Unavailable"
+        }
+        if selectedAgentSessionID != nil {
+            return "Attached"
+        }
+        if connection.canExecute {
+            return "Ready to Attach"
+        }
+        return "Blocked"
+    }
+
+    var selectedRuntimeWorkspaceMarkers: [String] {
+        selectedAgentConnection?.workspaceMarkers ?? []
+    }
+
+    var latestAgentEventMessage: String {
+        liveAgentEvents.last?.message ?? "No live runtime events yet."
+    }
+
+    var canLaunchCodexLogin: Bool {
+        selectedAgentRuntimeID == "codex" && (selectedAgentConnection?.isCLIInstalled == true)
+    }
+
     func saveIterationCheckpoint() {
         guard currentIteration.task.isReadyForExecution else {
             persistenceStatus = "Checkpoint requires a task title and execution detail."
@@ -225,6 +271,7 @@ final class NangaAppModel {
         syncSelectedAgentModel()
         isAgentSelectionLocked = true
         resetLiveAgentEvents()
+        clearRuntimeError()
         if selectedProject.agentSession?.runtimeID != id {
             mutateProject { project in
                 project.agentSession = nil
@@ -234,6 +281,7 @@ final class NangaAppModel {
             try await connectSelectedAgentIfNeeded()
             persistAgentSelection(statusMessage: "Locked the project onto the selected agent.")
         } catch {
+            setRuntimeError(error.localizedDescription)
             persistAgentSelection(statusMessage: "Failed to attach to the selected agent: \(error.localizedDescription)")
         }
     }
@@ -260,6 +308,7 @@ final class NangaAppModel {
         }
 
         resetLiveAgentEvents()
+        clearRuntimeError()
 
         do {
             try await connectSelectedAgentIfNeeded(forceReconnect: false)
@@ -269,6 +318,7 @@ final class NangaAppModel {
                 persistenceStatus = "Agent is ready, but no active thread was created."
             }
         } catch {
+            setRuntimeError(error.localizedDescription)
             persistenceStatus = "Failed to link to \(selectedAgentConnection?.runtimeName ?? "selected agent"): \(error.localizedDescription)"
         }
     }
@@ -285,6 +335,7 @@ final class NangaAppModel {
         }
 
         resetLiveAgentEvents()
+        clearRuntimeError()
         mutateProject { project in
             if project.agentSession?.runtimeID == selectedAgentRuntimeID {
                 project.agentSession = nil
@@ -300,8 +351,51 @@ final class NangaAppModel {
                 persistenceStatus = "Re-link finished without an active thread."
             }
         } catch {
+            setRuntimeError(error.localizedDescription)
             persistenceStatus = "Failed to re-link \(selectedAgentConnection?.runtimeName ?? "selected agent"): \(error.localizedDescription)"
         }
+    }
+
+    func launchCodexLoginInTerminal() {
+        guard canLaunchCodexLogin else {
+            persistenceStatus = "Codex CLI is unavailable on this machine."
+            return
+        }
+
+        clearRuntimeError()
+
+        do {
+            let workingRoot = activeProjectRootURL ?? selectedProject.rootFolder?.resolvedURL
+            try TerminalCommandLauncher.openCodexDeviceLogin(workingRootURL: workingRoot)
+            recordAgentEvent(
+                AgentRuntimeEvent(
+                    kind: .status,
+                    message: "Opened Terminal for Codex login. Complete login there, then press Verify Login."
+                )
+            )
+            persistenceStatus = "Opened Terminal for Codex device login."
+        } catch {
+            setRuntimeError(error.localizedDescription)
+            persistenceStatus = "Failed to open Terminal for Codex login: \(error.localizedDescription)"
+        }
+    }
+
+    func refreshSelectedAgentConnectionState() {
+        refreshAgentConnections()
+
+        if selectedAgentRuntimeID == "codex" {
+            switch selectedAgentConnection?.authenticationStatus {
+            case .loggedIn:
+                persistenceStatus = "Codex login is verified."
+            case .loginRequired:
+                persistenceStatus = "Codex login is still required."
+            default:
+                persistenceStatus = "Codex connection state refreshed."
+            }
+            return
+        }
+
+        persistenceStatus = "Refreshed available agent connections."
     }
 
     func discoverCandidateFiles() {
@@ -369,9 +463,32 @@ final class NangaAppModel {
             )
         }
         resetLiveAgentEvents()
+        clearRuntimeError()
+        recordAgentEvent(
+            AgentRuntimeEvent(
+                kind: .status,
+                message: "Preparing scoped package for \(selectedRuntimeName)."
+            )
+        )
         persistProject(statusMessage: "Preparing scoped execution package.")
 
         do {
+            if activeSessionID(for: selectedAgentRuntimeID) == nil {
+                recordAgentEvent(
+                    AgentRuntimeEvent(
+                        kind: .status,
+                        message: "Attaching to \(selectedRuntimeName) before execution."
+                    )
+                )
+            } else if let sessionID = selectedAgentSessionID {
+                recordAgentEvent(
+                    AgentRuntimeEvent(
+                        kind: .status,
+                        message: "Resuming \(selectedRuntimeName) thread \(sessionID)."
+                    )
+                )
+            }
+
             try await connectSelectedAgentIfNeeded()
             let carryForwardItems = buildCarryForwardItems()
             let executionPackage = try executionPackageBuilder.build(
@@ -384,6 +501,12 @@ final class NangaAppModel {
                 persistenceStatus = "Selected agent runtime is not available."
                 return
             }
+            recordAgentEvent(
+                AgentRuntimeEvent(
+                    kind: .status,
+                    message: "Sending \(executionPackage.fileCount) scoped files to \(runtime.displayName)."
+                )
+            )
 
             let result = try await runtime.execute(
                 executionPackage,
@@ -397,13 +520,14 @@ final class NangaAppModel {
             saveIterationCheckpoint()
             persistProject(statusMessage: "Built the scoped execution package and ran it through the active runtime.")
         } catch {
-                mutateCurrentIteration { iteration in
-                    iteration.execution = ExecutionSummary(
-                        status: .failed,
-                        headline: "Execution failed",
-                        detail: error.localizedDescription
-                    )
-                }
+            setRuntimeError(error.localizedDescription)
+            mutateCurrentIteration { iteration in
+                iteration.execution = ExecutionSummary(
+                    status: .failed,
+                    headline: "Execution failed",
+                    detail: error.localizedDescription
+                )
+            }
             persistProject(statusMessage: "Failed to run the scoped iteration: \(error.localizedDescription)")
         }
     }
@@ -554,7 +678,8 @@ final class NangaAppModel {
             project.agentSession = session
         }
         refreshAgentConnections()
-        persistProject(statusMessage: "Attached Nanga to the active \(session.runtimeID.capitalized) thread.")
+        let runtimeName = agentRuntimeRegistry.runtime(for: session.runtimeID)?.displayName ?? session.runtimeID
+        persistProject(statusMessage: "Attached Nanga to the active \(runtimeName) thread.")
     }
 
     private func makeAgentEventHandler() -> @Sendable (AgentRuntimeEvent) -> Void {
@@ -569,16 +694,21 @@ final class NangaAppModel {
         liveAgentEvents.append(event)
         liveAgentEvents = Array(liveAgentEvents.suffix(24))
 
+        if event.kind == .error {
+            setRuntimeError(event.message)
+        }
+
         let headline: String
+        let runtimeName = selectedRuntimeName
         switch event.kind {
         case .threadStarted:
-            headline = "Codex attached"
+            headline = "\(runtimeName) attached"
         case .status:
-            headline = "Codex running"
+            headline = "\(runtimeName) running"
         case .message:
-            headline = "Codex responded"
+            headline = "\(runtimeName) responded"
         case .error:
-            headline = "Codex signaled an issue"
+            headline = "\(runtimeName) signaled an issue"
         }
 
         mutateCurrentIteration { iteration in
@@ -592,6 +722,15 @@ final class NangaAppModel {
 
     private func resetLiveAgentEvents() {
         liveAgentEvents = []
+    }
+
+    private func clearRuntimeError() {
+        lastRuntimeError = nil
+    }
+
+    private func setRuntimeError(_ message: String) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastRuntimeError = trimmed.isEmpty ? nil : trimmed
     }
 
     private func restoreProjectRootAccess() {
@@ -693,6 +832,61 @@ final class NangaAppModel {
             eventHandler: makeAgentEventHandler()
         ) {
             persistAgentSession(session)
+        }
+    }
+}
+
+private enum TerminalCommandLauncher {
+    static func openCodexDeviceLogin(workingRootURL: URL?) throws {
+        let workingPath = (workingRootURL ?? URL(filePath: NSHomeDirectory())).path(percentEncoded: false)
+        let shellCommand = "cd \(shellSingleQuoted(workingPath)); codex login --device-auth"
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "\(appleScriptEscaped(shellCommand))"
+        end tell
+        """
+
+        let process = Process()
+        process.executableURL = URL(filePath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorText = String(decoding: errorData, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            throw TerminalCommandError.launchFailed(
+                errorText.isEmpty ? "Terminal command exited with status \(process.terminationStatus)." : errorText
+            )
+        }
+    }
+
+    private static func shellSingleQuoted(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "'", with: "'\\''")
+        return "'\(escaped)'"
+    }
+
+    private static func appleScriptEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+}
+
+private enum TerminalCommandError: LocalizedError {
+    case launchFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .launchFailed(let detail):
+            detail
         }
     }
 }
