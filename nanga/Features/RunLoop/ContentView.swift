@@ -905,7 +905,7 @@ struct ContentView: View {
 
                 if index < steps.count - 1 {
                     Rectangle()
-                        .fill(step.state == .done ? theme.cyan.opacity(0.65) : theme.border.opacity(0.8))
+                        .fill(step.state == LoopStepState.done ? theme.cyan.opacity(0.65) : theme.border.opacity(0.8))
                         .frame(height: 1)
                 }
             }
@@ -914,7 +914,7 @@ struct ContentView: View {
 
     private func taskLoopStepState(iteration: IterationState) -> LoopStepState {
         guard isLinkStepComplete() else {
-            return .pending
+            return LoopStepState.pending
         }
 
         return iteration.task.isReadyForExecution ? LoopStepState.done : LoopStepState.active
@@ -922,70 +922,70 @@ struct ContentView: View {
 
     private func scopeLoopStepState(iteration: IterationState) -> LoopStepState {
         guard iteration.task.isReadyForExecution else {
-            return .pending
+            return LoopStepState.pending
         }
 
         if appModel.selectedFileCount > 0 {
-            return .done
+            return LoopStepState.done
         }
 
         if appModel.hasProjectRoot {
-            return .active
+            return LoopStepState.active
         }
 
-        return .pending
+        return LoopStepState.pending
     }
 
     private func connectLoopStepState() -> LoopStepState {
         guard let connection = appModel.selectedAgentConnection else {
-            return .pending
+            return LoopStepState.pending
         }
 
         if connection.status == .unavailable || !connection.isCLIInstalled {
-            return .blocked
+            return LoopStepState.blocked
         }
 
         if appModel.requiresSelectedRuntimeLogin {
-            return .active
+            return LoopStepState.active
         }
 
-        return .done
+        return LoopStepState.done
     }
 
     private func linkLoopStepState() -> LoopStepState {
         guard isConnectStepComplete() else {
-            return appModel.requiresSelectedRuntimeLogin ? .blocked : .pending
+            return appModel.requiresSelectedRuntimeLogin ? LoopStepState.blocked : LoopStepState.pending
         }
 
         if isLinkStepComplete() {
-            return .done
+            return LoopStepState.done
         }
 
         if appModel.hasProjectRoot && appModel.isAgentSelectionLocked {
-            return .active
+            return LoopStepState.active
         }
 
-        return .pending
+        return LoopStepState.pending
     }
 
     private func runLoopStepState(iteration: IterationState) -> LoopStepState {
         if iteration.execution.status == .refreshed {
-            return .done
+            return LoopStepState.done
         }
 
         if iteration.execution.status == .running || appModel.canRunIteration {
-            return .active
+            return LoopStepState.active
         }
 
         if !isScopeStepComplete(iteration: iteration) {
-            return .pending
+            return LoopStepState.pending
         }
 
         if !isConnectStepComplete() {
-            return .blocked
+            return LoopStepState.blocked
         }
 
-        return .pending
+        return LoopStepState.pending
     }
 
     private func isConnectStepComplete() -> Bool {
@@ -1010,7 +1010,7 @@ struct ContentView: View {
         return VStack(spacing: 4) {
             ZStack {
                 Circle()
-                    .fill(tint.opacity(state == .done ? 0.28 : 0.16))
+                    .fill(tint.opacity(state == LoopStepState.done ? 0.28 : 0.16))
                     .frame(width: 24, height: 24)
                     .overlay(
                         Circle()

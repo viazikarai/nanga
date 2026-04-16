@@ -1,6 +1,6 @@
 import Foundation
 
-private enum TerminalCommandLauncher {
+enum TerminalCommandLauncher {
     static func openCodexLoginAssisted(workingRootURL: URL?) throws {
         let workingPath = (workingRootURL ?? URL(filePath: NSHomeDirectory())).path(percentEncoded: false)
         let shellCommand = """
