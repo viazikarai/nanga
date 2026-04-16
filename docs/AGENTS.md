@@ -72,7 +72,6 @@ SwiftUI:
 - building macOS-native interfaces that stay clear across window sizes
 - deciding when to split, simplify, or keep a view intact
 
-
 Agentic workflows:
 - turning signal into bounded execution
 - defining scope before execution

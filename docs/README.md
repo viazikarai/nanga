@@ -112,17 +112,17 @@ Current agent surfaces modeled in the app:
 
 ## Main Files
 
-- [nanga/Features/RunLoop/ContentView.swift](nanga/Features/RunLoop/ContentView.swift)
+- [nanga/Features/RunLoop/ContentView.swift](../nanga/Features/RunLoop/ContentView.swift)
   Main macOS UI, landing flow, and locked agent workspace.
-- [nanga/Features/RunLoop/NangaAppModel.swift](nanga/Features/RunLoop/NangaAppModel.swift)
+- [nanga/Features/RunLoop/NangaAppModel.swift](../nanga/Features/RunLoop/NangaAppModel.swift)
   Main app state, iteration flow, persistence wiring, and discovery orchestration.
-- [nanga/Core/AgentRuntime/AgentRuntime.swift](nanga/Core/AgentRuntime/AgentRuntime.swift)
+- [nanga/Core/AgentRuntime/AgentRuntime.swift](../nanga/Core/AgentRuntime/AgentRuntime.swift)
   Runtime protocol, registry, runtime detection, and current mock execution adapters.
-- [nanga/Core/Persistence/ProjectStore.swift](nanga/Core/Persistence/ProjectStore.swift)
+- [nanga/Core/Persistence/ProjectStore.swift](../nanga/Core/Persistence/ProjectStore.swift)
   Local JSON persistence for project state.
-- [nanga/Core/AgentRuntime/ExecutionPackage.swift](nanga/Core/AgentRuntime/ExecutionPackage.swift)
+- [nanga/Core/AgentRuntime/ExecutionPackage.swift](../nanga/Core/AgentRuntime/ExecutionPackage.swift)
   Bounded execution package model.
-- [nanga/Core/AgentRuntime/ExecutionPackageBuilder.swift](nanga/Core/AgentRuntime/ExecutionPackageBuilder.swift)
+- [nanga/Core/AgentRuntime/ExecutionPackageBuilder.swift](../nanga/Core/AgentRuntime/ExecutionPackageBuilder.swift)
   Package construction from current task, signal, and scope.
 
 ## Current Status
