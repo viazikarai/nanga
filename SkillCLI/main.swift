@@ -154,7 +154,7 @@ private enum SkillCLIPrinter {
     static func usage() -> String {
         """
         usage:
-          nanga-skill --root <path> --task <title> --intent <detail> [options]
+          context-anchor --root <path> --task <title> --intent <detail> [options]
 
         options:
           --scope-file <relative-path>   include previous scope file (repeatable)

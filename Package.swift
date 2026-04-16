@@ -12,8 +12,8 @@ let package = Package(
             targets: ["NangaCore"]
         ),
         .executable(
-            name: "nanga-skill",
-            targets: ["NangaSkillCLI"]
+            name: "context-anchor",
+            targets: ["ContextAnchorCLI"]
         )
     ],
     targets: [
@@ -37,7 +37,7 @@ let package = Package(
             path: "nangaTests"
         ),
         .executableTarget(
-            name: "NangaSkillCLI",
+            name: "ContextAnchorCLI",
             dependencies: ["NangaCore"],
             path: "SkillCLI"
         )

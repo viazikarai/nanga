@@ -1,6 +1,6 @@
-# Nanga Skill
+# context-anchor skill
 
-Nanga is a memory-optimization skill for smaller context windows.
+context-anchor is a memory-optimization skill for smaller context windows.
 
 ## Input
 
@@ -27,12 +27,18 @@ Optional:
 ## Run
 
 ```bash
-swift run nanga-skill \
+swift run context-anchor \
   --root /path/to/repo \
   --task "improve run-loop memory" \
   --intent "keep constraints and scoped files, defer low-value notes" \
   --note "avoid transcript bloat" \
   --token-budget 280
+```
+
+## Install
+
+```bash
+swift build -c release --product context-anchor
 ```
 
 ## Design Rules

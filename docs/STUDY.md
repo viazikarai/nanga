@@ -27,7 +27,7 @@ Legend:
 
 - [x] runtime abstraction and capability detection patterns.
 - [x] bounded prompt package handoff shape.
-- [x] terminal-first invocation pattern via `nanga-skill`.
+- [x] terminal-first invocation pattern via `context-anchor`.
 - [ ] runtime-specific schema adapters for deeper integration.
 
 ## Testing And Quality

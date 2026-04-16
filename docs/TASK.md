@@ -13,7 +13,7 @@ make nanga the default memory optimizer skill for smaller context windows:
 - [x] auto-selection of top-signal files
 - [x] bounded execution package construction
 - [x] keep/defer/drop memory partitioning with token budget
-- [x] terminal skill surface (`nanga-skill`)
+- [x] terminal skill surface (`context-anchor`)
 - [x] unit coverage for scope and run-loop state transitions
 - [x] unit coverage for skill budgeting behavior
 

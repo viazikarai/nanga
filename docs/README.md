@@ -33,7 +33,7 @@ Nanga helps local and low-context models keep decision-critical memory instead o
 The terminal surface is now first-class:
 
 ```bash
-swift run nanga-skill \
+swift run context-anchor \
   --root /path/to/repo \
   --task "improve memory budget" \
   --intent "keep constraints and scoped files, defer weaker notes" \
