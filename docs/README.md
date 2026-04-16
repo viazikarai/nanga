@@ -1,7 +1,5 @@
 # Nanga
 
-Internal working note. Not for external publication without explicit approval.
-
 ## What This Project Is
 
 Nanga is a skill-first memory optimizer for agent runs.
