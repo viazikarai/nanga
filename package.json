@@ -1,0 +1,38 @@
+{
+  "name": "context-anchor",
+  "version": "0.1.0",
+  "description": "agent-agnostic memory optimizer for small context windows",
+  "bin": {
+    "context-anchor": "bin/context-anchor.js"
+  },
+  "files": [
+    "bin",
+    "scripts/npm-install.js",
+    "Package.swift",
+    "SkillCLI",
+    "nanga",
+    "nangaTests",
+    "Tests",
+    "SKILL.md",
+    "docs/README.md"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/npm-install.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "context",
+    "memory",
+    "swift",
+    "cli"
+  ],
+  "license": "MIT"
+}

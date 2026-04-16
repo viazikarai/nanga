@@ -67,7 +67,7 @@ Output is deterministic and human-auditable.
 
 Use one of these paths.
 
-### Option A: keep it inside your project repo
+### Option A: swift install (submodule in your project)
 
 ```bash
 cd /path/to/your-project
@@ -102,6 +102,25 @@ context-anchor \
   --task "improve context handoff" \
   --intent "keep constraints and scoped files, defer weak notes"
 ```
+
+### Option C: npm global install
+
+```bash
+npm install -g context-anchor
+```
+
+Then run from any project:
+
+```bash
+context-anchor \
+  --root /path/to/your-project \
+  --task "improve context handoff" \
+  --intent "keep constraints and scoped files, defer weak notes"
+```
+
+Important right now:
+- npm install currently builds from source during `postinstall`
+- users still need a working Swift toolchain installed
 
 ## Repository Boundaries
 

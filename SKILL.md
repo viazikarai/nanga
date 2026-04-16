@@ -41,6 +41,16 @@ swift run context-anchor \
 swift build -c release --product context-anchor
 ```
 
+or npm global install:
+
+```bash
+npm install -g context-anchor
+```
+
+note:
+- npm install currently builds from source at install time
+- users need a working swift toolchain
+
 ## Design Rules
 
 - deterministic ordering

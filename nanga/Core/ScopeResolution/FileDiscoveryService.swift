@@ -61,7 +61,7 @@ public struct FileDiscoveryService {
 
             let relativePath = relativePath(from: fileURL, rootURL: rootURL)
             let pathTokens = Set(tokenize(relativePath))
-            let filenameTokens = Set(tokenize(URL(filePath: relativePath).lastPathComponent))
+            let filenameTokens = Set(tokenize(fileURL.lastPathComponent))
             let contentTokens = Set(tokenize(readSearchableContent(from: fileURL)))
 
             let pathMatches = weightedMatches(pathTokens, using: tokenWeights)
@@ -184,12 +184,12 @@ public struct FileDiscoveryService {
 
     // read a bounded content slice for scoring context.
     private func readSearchableContent(from fileURL: URL) -> String {
-        guard let data = try? Data(contentsOf: fileURL),
-              let content = String(data: data.prefix(maxContentCharacters), encoding: .utf8) else {
+        guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]) else {
             return ""
         }
 
-        return content
+        // decode loss-tolerantly so malformed utf8 does not drop scoring context.
+        return String(decoding: data.prefix(maxContentCharacters), as: UTF8.self)
     }
 
     // auto-select top candidates to produce a fast default scope.
