@@ -917,7 +917,7 @@ struct ContentView: View {
             return .pending
         }
 
-        iteration.task.isReadyForExecution ? .done : .active
+        return iteration.task.isReadyForExecution ? LoopStepState.done : LoopStepState.active
     }
 
     private func scopeLoopStepState(iteration: IterationState) -> LoopStepState {
