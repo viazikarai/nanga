@@ -361,16 +361,17 @@ private enum CLIWorkspaceDetector {
 
         let normalized = output.lowercased()
 
+        if normalized.contains("logged in")
+            || normalized.contains("authenticated")
+            || normalized.contains("using chatgpt")
+            || normalized.contains("using api key") {
+            return .loggedIn(output)
+        }
+
         if normalized.contains("not logged in")
             || normalized.contains("login required")
             || normalized.contains("not authenticated") {
             return .loginRequired
-        }
-
-        if normalized.contains("logged in")
-            || normalized.contains("authenticated")
-            || normalized.contains("using chatgpt") {
-            return .loggedIn(output)
         }
 
         // Prefer safe gating over optimistic execution when status text is unknown.
@@ -401,6 +402,7 @@ private enum CLIWorkspaceDetector {
 
         process.executableURL = executableURL
         process.arguments = processArguments
+        process.environment = processEnvironment()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
         process.standardOutput = outputPipe
@@ -437,6 +439,29 @@ private enum CLIWorkspaceDetector {
             return FileManager.default.isExecutableFile(atPath: url.path(percentEncoded: false)) ? url : nil
         }
 
+        let uniquePaths = normalizedSearchPaths()
+        for directory in uniquePaths {
+            let candidate = URL(filePath: directory).appending(path: command)
+            if FileManager.default.isExecutableFile(atPath: candidate.path(percentEncoded: false)) {
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
+    static func processEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = normalizedSearchPaths().joined(separator: ":")
+
+        if environment["HOME"]?.isEmpty ?? true {
+            environment["HOME"] = NSHomeDirectory()
+        }
+
+        return environment
+    }
+
+    private static func normalizedSearchPaths() -> [String] {
         let searchPaths = (
             ProcessInfo.processInfo.environment["PATH"]?.split(separator: ":").map(String.init) ?? []
         ) + [
@@ -450,15 +475,7 @@ private enum CLIWorkspaceDetector {
             NSHomeDirectory() + "/bin"
         ]
 
-        let uniquePaths = Array(NSOrderedSet(array: searchPaths)) as? [String] ?? searchPaths
-        for directory in uniquePaths {
-            let candidate = URL(filePath: directory).appending(path: command)
-            if FileManager.default.isExecutableFile(atPath: candidate.path(percentEncoded: false)) {
-                return candidate
-            }
-        }
-
-        return nil
+        return Array(NSOrderedSet(array: searchPaths)) as? [String] ?? searchPaths
     }
 }
 
@@ -594,6 +611,7 @@ private enum CodexCLIExecutor {
         }
         process.executableURL = codexURL
         process.currentDirectoryURL = rootURL
+        process.environment = CLIWorkspaceDetector.processEnvironment()
 
         if let sessionID {
             process.arguments = ["exec", "resume", sessionID]
