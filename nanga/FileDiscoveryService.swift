@@ -6,59 +6,79 @@ struct FileDiscoveryService {
     private let maxCandidates: Int
     private let maxAutoSelected: Int
     private let maxContentCharacters: Int
+    private let pathScoreMultiplier: Int
+    private let filenameScoreMultiplier: Int
+    private let contentScoreMultiplier: Int
+    private let previousSelectionBoost: Int
 
     init(
         fileManager: FileManager = .default,
         allowedExtensions: Set<String> = ["swift", "md", "txt", "json", "yml", "yaml"],
         maxCandidates: Int = 12,
         maxAutoSelected: Int = 4,
-        maxContentCharacters: Int = 8_000
+        maxContentCharacters: Int = 8_000,
+        pathScoreMultiplier: Int = 4,
+        filenameScoreMultiplier: Int = 6,
+        contentScoreMultiplier: Int = 2,
+        previousSelectionBoost: Int = 4
     ) {
         self.fileManager = fileManager
         self.allowedExtensions = allowedExtensions
         self.maxCandidates = maxCandidates
         self.maxAutoSelected = maxAutoSelected
         self.maxContentCharacters = maxContentCharacters
+        self.pathScoreMultiplier = pathScoreMultiplier
+        self.filenameScoreMultiplier = filenameScoreMultiplier
+        self.contentScoreMultiplier = contentScoreMultiplier
+        self.previousSelectionBoost = previousSelectionBoost
     }
 
     func discoverCandidates(in rootURL: URL, task: TaskDraft, previousSelections: [String]) throws -> [CandidateFile] {
-        let tokens = tokenize("\(task.title) \(task.detail)")
+        let titleTokens = tokenize(task.title)
+        let detailTokens = tokenize(task.detail)
+        let tokenWeights = buildTokenWeights(titleTokens: titleTokens, detailTokens: detailTokens)
+        let rootPath = rootURL.standardizedFileURL.path(percentEncoded: false)
         let enumerator = fileManager.enumerator(
             at: rootURL,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         )
 
         var matches: [CandidateFile] = []
 
         while let fileURL = enumerator?.nextObject() as? URL {
-            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
             guard values.isRegularFile == true else { continue }
+            if values.isSymbolicLink == true { continue }
+
+            let standardizedFilePath = fileURL.standardizedFileURL.path(percentEncoded: false)
+            guard standardizedFilePath.hasPrefix(rootPath) else { continue }
 
             let ext = fileURL.pathExtension.lowercased()
             guard allowedExtensions.contains(ext) else { continue }
 
             let relativePath = relativePath(from: fileURL, rootURL: rootURL)
-            let pathTokens = tokenize(relativePath)
-            let contentTokens = tokenize(readSearchableContent(from: fileURL))
+            let pathTokens = Set(tokenize(relativePath))
+            let filenameTokens = Set(tokenize(URL(filePath: relativePath).lastPathComponent))
+            let contentTokens = Set(tokenize(readSearchableContent(from: fileURL)))
 
-            let sharedPathTokens = Set(tokens).intersection(pathTokens)
-            let sharedContentTokens = Set(tokens).intersection(contentTokens)
-            let previousBoost = previousSelections.contains(relativePath) ? 3 : 0
-            let score = sharedPathTokens.count * 5
-                + sharedContentTokens.count * 3
-                + filenameBoost(for: relativePath, using: tokens)
-                + previousBoost
+            let pathMatches = weightedMatches(pathTokens, using: tokenWeights)
+            let filenameMatches = weightedMatches(filenameTokens, using: tokenWeights)
+            let contentMatches = weightedMatches(contentTokens, using: tokenWeights)
+            let wasPreviouslySelected = previousSelections.contains(relativePath)
 
-            guard score > 0 || matches.count < 6 else { continue }
+            let score = pathMatches.weightedScore * pathScoreMultiplier
+                + filenameMatches.weightedScore * filenameScoreMultiplier
+                + contentMatches.weightedScore * contentScoreMultiplier
+                + (wasPreviouslySelected ? previousSelectionBoost : 0)
 
-            let reason: String
-            let matchedTokens = Array(sharedPathTokens.union(sharedContentTokens)).sorted()
-            if matchedTokens.isEmpty {
-                reason = "Added as a fallback candidate from the project root."
-            } else {
-                reason = "Nanga matched task terms: \(matchedTokens.joined(separator: ", "))"
-            }
+            let reason = buildReason(
+                pathMatches: pathMatches.tokens,
+                filenameMatches: filenameMatches.tokens,
+                contentMatches: contentMatches.tokens,
+                wasPreviouslySelected: wasPreviouslySelected,
+                score: score
+            )
 
             matches.append(
                 CandidateFile(
@@ -82,13 +102,63 @@ struct FileDiscoveryService {
         return autoSelectScope(from: limitedMatches)
     }
 
-    private func filenameBoost(for path: String, using tokens: [String]) -> Int {
-        let lastComponent = URL(filePath: path).lastPathComponent.lowercased()
-        return tokens.reduce(into: 0) { partialResult, token in
-            if lastComponent.contains(token) {
-                partialResult += 2
-            }
+    private func buildTokenWeights(titleTokens: [String], detailTokens: [String]) -> [String: Int] {
+        var weights: [String: Int] = [:]
+
+        for token in titleTokens {
+            weights[token] = max(weights[token] ?? 0, 3)
         }
+
+        for token in detailTokens {
+            weights[token] = max(weights[token] ?? 0, 2)
+        }
+
+        return weights
+    }
+
+    private func weightedMatches(_ candidateTokens: Set<String>, using tokenWeights: [String: Int]) -> (tokens: [String], weightedScore: Int) {
+        var matchedTokens: [String] = []
+        var weightedScore = 0
+
+        for token in candidateTokens.sorted() {
+            guard let weight = tokenWeights[token] else { continue }
+            matchedTokens.append(token)
+            weightedScore += weight
+        }
+
+        return (matchedTokens, weightedScore)
+    }
+
+    private func buildReason(
+        pathMatches: [String],
+        filenameMatches: [String],
+        contentMatches: [String],
+        wasPreviouslySelected: Bool,
+        score: Int
+    ) -> String {
+        var reasonParts: [String] = []
+
+        if !filenameMatches.isEmpty {
+            reasonParts.append("filename: \(filenameMatches.joined(separator: ", "))")
+        }
+
+        if !pathMatches.isEmpty {
+            reasonParts.append("path: \(pathMatches.joined(separator: ", "))")
+        }
+
+        if !contentMatches.isEmpty {
+            reasonParts.append("content: \(contentMatches.joined(separator: ", "))")
+        }
+
+        if wasPreviouslySelected {
+            reasonParts.append("carried from previous scope")
+        }
+
+        if reasonParts.isEmpty || score == 0 {
+            return "Fallback candidate from the approved folder because no direct task-term match was found."
+        }
+
+        return reasonParts.joined(separator: " | ")
     }
 
     private func tokenize(_ string: String) -> [String] {
@@ -118,14 +188,29 @@ struct FileDiscoveryService {
     private func autoSelectScope(from matches: [CandidateFile]) -> [CandidateFile] {
         guard !matches.isEmpty else { return [] }
 
-        let selectedPaths = Set(matches.prefix(maxAutoSelected).map(\.path))
+        let positiveMatches = matches.filter { $0.score > 0 }
+        let selectedSeed = positiveMatches.isEmpty
+            ? Array(matches.prefix(min(maxAutoSelected, 2)))
+            : Array(positiveMatches.prefix(maxAutoSelected))
+        let selectedPaths = Set(selectedSeed.map(\.path))
+
         return matches.map { candidate in
+            let isSelected = selectedPaths.contains(candidate.path)
+            let selectionSuffix: String
+            if isSelected {
+                selectionSuffix = candidate.score > 0
+                    ? " | auto-selected: highest signal for this task"
+                    : " | auto-selected fallback: no direct task-term match"
+            } else {
+                selectionSuffix = ""
+            }
+
             CandidateFile(
                 id: candidate.id,
                 path: candidate.path,
-                reason: candidate.reason,
+                reason: "\(candidate.reason)\(selectionSuffix)",
                 score: candidate.score,
-                isSelected: selectedPaths.contains(candidate.path)
+                isSelected: isSelected
             )
         }
     }

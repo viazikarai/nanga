@@ -115,6 +115,69 @@ struct nangaTests {
         #expect(candidates.contains { $0.path == "ContentView.swift" })
     }
 
+    @Test func discoveryExplainsAndAutoSelectsHighestSignalFile() async throws {
+        let rootURL = URL.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+
+        try "struct TaskInputPanel {}".write(
+            to: rootURL.appending(path: "TaskInputPanel.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "Project notes without matching keywords".write(
+            to: rootURL.appending(path: "Notes.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let service = FileDiscoveryService()
+        let candidates = try service.discoverCandidates(
+            in: rootURL,
+            task: TaskDraft(title: "Improve task input panel", detail: "Tighten input scope behavior"),
+            previousSelections: []
+        )
+
+        let signalCandidate = try #require(candidates.first { $0.path == "TaskInputPanel.swift" })
+        let fallbackCandidate = try #require(candidates.first { $0.path == "Notes.md" })
+
+        #expect(signalCandidate.isSelected)
+        #expect(signalCandidate.reason.contains("filename:"))
+        #expect(signalCandidate.reason.contains("auto-selected: highest signal for this task"))
+        #expect(fallbackCandidate.isSelected == false)
+    }
+
+    @Test func discoveryUsesDeterministicFallbackWhenNoTermsMatch() async throws {
+        let rootURL = URL.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+
+        try "struct Alpha {}".write(
+            to: rootURL.appending(path: "Alpha.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "struct Beta {}".write(
+            to: rootURL.appending(path: "Beta.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let service = FileDiscoveryService()
+        let candidates = try service.discoverCandidates(
+            in: rootURL,
+            task: TaskDraft(title: "quuxxyzz", detail: "plmoknijb"),
+            previousSelections: []
+        )
+
+        #expect(!candidates.isEmpty)
+
+        let selectedFallbacks = candidates.filter(\.isSelected)
+        #expect(!selectedFallbacks.isEmpty)
+        #expect(selectedFallbacks.allSatisfy { $0.reason.contains("auto-selected fallback") })
+        #expect(selectedFallbacks.allSatisfy { $0.reason.contains("Fallback candidate from the approved folder") })
+    }
+
     @MainActor
     @Test func runIterationRefreshesStateAndSavesHistory() async throws {
         let baseDirectoryURL = URL.temporaryDirectory
