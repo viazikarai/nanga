@@ -1,6 +1,7 @@
 import Foundation
 
-struct FileDiscoveryService {
+// deterministic file discovery + scoring for bounded scope selection.
+public struct FileDiscoveryService {
     private let fileManager: FileManager
     private let allowedExtensions: Set<String>
     private let maxCandidates: Int
@@ -11,7 +12,7 @@ struct FileDiscoveryService {
     private let contentScoreMultiplier: Int
     private let previousSelectionBoost: Int
 
-    init(
+    public init(
         fileManager: FileManager = .default,
         allowedExtensions: Set<String> = ["swift", "md", "txt", "json", "yml", "yaml"],
         maxCandidates: Int = 12,
@@ -33,7 +34,8 @@ struct FileDiscoveryService {
         self.previousSelectionBoost = previousSelectionBoost
     }
 
-    func discoverCandidates(in rootURL: URL, task: TaskDraft, previousSelections: [String]) throws -> [CandidateFile] {
+    // scan approved root and return ranked candidate files.
+    public func discoverCandidates(in rootURL: URL, task: TaskDraft, previousSelections: [String]) throws -> [CandidateFile] {
         let titleTokens = tokenize(task.title)
         let detailTokens = tokenize(task.detail)
         let tokenWeights = buildTokenWeights(titleTokens: titleTokens, detailTokens: detailTokens)
@@ -102,6 +104,7 @@ struct FileDiscoveryService {
         return autoSelectScope(from: limitedMatches)
     }
 
+    // weight title tokens higher than detail tokens.
     private func buildTokenWeights(titleTokens: [String], detailTokens: [String]) -> [String: Int] {
         var weights: [String: Int] = [:]
 
@@ -116,6 +119,7 @@ struct FileDiscoveryService {
         return weights
     }
 
+    // find overlap between discovered tokens and task tokens.
     private func weightedMatches(_ candidateTokens: Set<String>, using tokenWeights: [String: Int]) -> (tokens: [String], weightedScore: Int) {
         var matchedTokens: [String] = []
         var weightedScore = 0
@@ -129,6 +133,7 @@ struct FileDiscoveryService {
         return (matchedTokens, weightedScore)
     }
 
+    // build human-readable scoring reasons for each candidate.
     private func buildReason(
         pathMatches: [String],
         filenameMatches: [String],
@@ -161,6 +166,7 @@ struct FileDiscoveryService {
         return reasonParts.joined(separator: " | ")
     }
 
+    // tokenize input text into simple alphanumeric terms.
     private func tokenize(_ string: String) -> [String] {
         let rawParts = string
             .lowercased()
@@ -176,6 +182,7 @@ struct FileDiscoveryService {
             .filter { $0.count > 2 && !stopWords.contains($0) }
     }
 
+    // read a bounded content slice for scoring context.
     private func readSearchableContent(from fileURL: URL) -> String {
         guard let data = try? Data(contentsOf: fileURL),
               let content = String(data: data.prefix(maxContentCharacters), encoding: .utf8) else {
@@ -185,6 +192,7 @@ struct FileDiscoveryService {
         return content
     }
 
+    // auto-select top candidates to produce a fast default scope.
     private func autoSelectScope(from matches: [CandidateFile]) -> [CandidateFile] {
         guard !matches.isEmpty else { return [] }
 
@@ -215,6 +223,7 @@ struct FileDiscoveryService {
         }
     }
 
+    // convert absolute file path to root-relative path.
     private func relativePath(from fileURL: URL, rootURL: URL) -> String {
         let rootPath = rootURL.path(percentEncoded: false)
         let filePath = fileURL.path(percentEncoded: false)

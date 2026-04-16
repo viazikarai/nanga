@@ -1,7 +1,9 @@
 import Foundation
 
-struct SignalItem: Identifiable, Equatable, Codable {
-    enum Kind: String, Equatable, Codable {
+// typed signal item used by the memory optimizer.
+public struct SignalItem: Identifiable, Equatable, Codable {
+    // canonical signal categories surfaced by the skill.
+    public enum Kind: String, Equatable, Codable {
         case taskIntent = "Task Intent"
         case relevantFile = "Relevant File"
         case constraint = "Constraint"
@@ -10,17 +12,21 @@ struct SignalItem: Identifiable, Equatable, Codable {
         case decision = "Decision"
     }
 
-    let id: UUID
-    var kind: Kind
-    var title: String
+    // stable identity for lists and merges.
+    public let id: UUID
+    // signal class used for sorting and formatting.
+    public var kind: Kind
+    // human-readable signal text.
+    public var title: String
 
-    init(id: UUID = UUID(), kind: Kind, title: String) {
+    public init(id: UUID = UUID(), kind: Kind, title: String) {
         self.id = id
         self.kind = kind
         self.title = title
     }
 
-    func minimizedForPersistence() -> SignalItem {
+    // trim text before carry-forward persistence.
+    public func minimizedForPersistence() -> SignalItem {
         SignalItem(
             kind: kind,
             title: title.trimmingCharacters(in: .whitespacesAndNewlines)

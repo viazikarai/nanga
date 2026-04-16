@@ -6,7 +6,7 @@ Target:
 - macOS 15.0+
 - Swift 6.2+
 - strict Swift Concurrency
-- SwiftUI unless a lower-level Apple framework is required
+- terminal-first skill surfaces
 
 Code must be:
 - scoped
@@ -16,36 +16,33 @@ Code must be:
 
 ## Product Scope
 
-Open-source scope:
-- scoped agent execution model
-- signal and scope model
-- architecture and runtime design
-- core implementation
-- basic execution surfaces such as CLI or engine tooling
+Primary scope:
+- skill-first agent execution model
+- signal extraction and scope resolution
+- memory optimization for smaller context windows
+- bounded prompt/package construction
+- carry-forward state for iterative turns
+- terminal and engine tooling surfaces
 
-Paid macOS app scope:
-- project and workspace management
-- task input
-- signal and scope panels
-- run and refresh UI
-- saved iteration state
-- exports
-- integrated agent workflows
-- macOS-native UX, performance, and polish
+Secondary scope (optional):
+- lightweight local inspector surfaces for debugging
+
+Out of scope for this repository:
+- full premium macOS operator app surface
+- workspace/project management UX as a product
+- broad UI polish tracks
 
 Do not collapse the boundary.
-The repository exposes the model and core parts.
-The macOS app is the full operator surface.
+The repository is a skill and core runtime project.
 
 ## Product Surfaces
 
-- project creation and opening
-- task input
-- signal display
-- scope display
-- run
-- refresh after execution
-- saved iteration state per project
+- task + intent input contract
+- approved-root scope discovery
+- keep/defer/drop memory output
+- bounded prompt output
+- carry-forward state output per iteration
+- terminal execution surface
 
 ## Agent Constraints
 
@@ -61,52 +58,39 @@ The macOS app is the full operator surface.
 The agent should use this project to teach:
 
 Swift:
-- modeling app state with explicit data flow
-- using async/await and structured concurrency in product code
+- modeling deterministic transformations
+- async/await and structured concurrency in runtime code
 - choosing modern Apple APIs over legacy patterns
 - writing small, composable types and focused functions
 
-SwiftUI:
-- structuring feature-oriented views, state, and models
-- keeping logic out of views without over-abstracting
-- building macOS-native interfaces that stay clear across window sizes
-- deciding when to split, simplify, or keep a view intact
-
-Agentic workflows:
-- turning signal into bounded execution
-- defining scope before execution
+Skill workflows:
+- turning noisy input into bounded signal
+- defining and enforcing scope before execution
 - refreshing context from results instead of stale assumptions
 - persisting only the state that should carry into the next iteration
-- separating an open execution model from a paid product surface
+- making small-context models behave more reliably
 
 ## Architecture
 
 Prefer feature ownership over file-type grouping.
 
 ```text
-Features/
-  ProjectSelection/
-  TaskInput/
-  SignalPanel/
-  ScopePanel/
-  RunLoop/
-  IterationHistory/
-
 Core/
-  Persistence/
-  AgentRuntime/
   SignalExtraction/
   ScopeResolution/
+  PromptCompilation/
+  AgentRuntime/
+  Persistence/
 
-DesignSystem/
-  Components/
-  Styles/
+SkillCLI/
+
+docs/
 ```
 
 Rules:
-- keep feature logic with the UI and state it serves
+- keep skill logic in `Core/SignalExtraction` + `Core/ScopeResolution`
+- keep prompt assembly focused and explicit
 - introduce shared code only after a second concrete use
-- do not move code into `Core` or `DesignSystem` early
 - do not create generic shared folders
 
 ## Swift
@@ -123,55 +107,18 @@ Forbidden:
 - force unwraps
 - `try!`
 
-Prefer:
-
-```swift
-Text(value, format: .number.precision(.fractionLength(2)))
-```
-
-Avoid:
-
-```swift
-String(format: "%.2f", value)
-```
-
 Use APIs such as `URL.documentsDirectory` and `appending(path:)`.
-
-## SwiftUI
-
-Required:
-- `NavigationStack`
-- `navigationDestination(for:)`
-- semantic controls such as `Button`
-- readable view bodies
-
-Avoid:
-- `onTapGesture` when a semantic control is available
-- `GeometryReader` unless layout depends on geometry
-- `AnyView`
-- business logic in views
-- oversized views mixing layout, state transitions, and orchestration
-
-For macOS:
-- support resizable layouts
-- keep panel surfaces readable at narrow and wide widths
-- prefer native macOS interaction patterns
 
 ## State
 
 Preferred:
-- `@Observable`
-- `@MainActor` on UI-facing observable types unless a different isolation boundary is required
-- `@State`
-- `@Bindable`
-- `@Environment`
+- explicit value types for skill input/output contracts
+- deterministic scoring and ordering logic
+- stable formatting for carry-forward output
 
-Do not introduce:
-- `ObservableObject`
-- `@Published`
-- `@StateObject`
-- `@ObservedObject`
-- `@EnvironmentObject`
+Avoid:
+- implicit global state
+- hidden heuristics with non-deterministic ordering
 
 ## Persistence
 
@@ -185,28 +132,22 @@ Avoid:
 - storing transient state as resumable state
 - persisting data that should be recomputed during refresh
 
-SwiftData with CloudKit:
-- no `@Attribute(.unique)`
-- all properties must have default values or be optional
-- all relationships must be optional
-
 ## Tests And Validation
 
 Required coverage:
 - signal extraction
 - scope resolution
+- prompt budgeting and keep/defer/drop behavior
 - persistence and reload
 - carry-forward state transitions
 - business logic and transformations
 
 Prefer unit tests for logic and state transitions.
-Add UI tests when run, refresh, and resume behavior depends on UI coordination.
 
-Validate with Xcode when applicable:
+Validate with SwiftPM when applicable:
 - build
+- test
 - warnings
-- previews for UI work
-- macOS interaction checks for panel, navigation, and persistence changes
 
 ## Naming And Quality
 
@@ -220,7 +161,7 @@ Prefer:
 - scope
 - iteration
 - refresh
-- project state
+- prompt
 - resulting state
 
 Avoid:
@@ -232,7 +173,7 @@ Avoid:
 
 - never include secrets
 - use secure storage where required
-- treat project state and task content as intentional user data
+- treat task content as intentional user data
 
 ## Commits
 
