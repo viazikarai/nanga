@@ -355,12 +355,26 @@ private enum CLIWorkspaceDetector {
     }
 
     static func codexLoginStatus() -> CodexLoginState {
-        guard let output = commandOutput(arguments: ["codex", "login", "status"]),
-              output.localizedCaseInsensitiveContains("logged in") else {
+        guard let output = commandOutput(arguments: ["codex", "login", "status"]) else {
             return .loginRequired
         }
 
-        return .loggedIn(output)
+        let normalized = output.lowercased()
+
+        if normalized.contains("not logged in")
+            || normalized.contains("login required")
+            || normalized.contains("not authenticated") {
+            return .loginRequired
+        }
+
+        if normalized.contains("logged in")
+            || normalized.contains("authenticated")
+            || normalized.contains("using chatgpt") {
+            return .loggedIn(output)
+        }
+
+        // Prefer safe gating over optimistic execution when status text is unknown.
+        return .loginRequired
     }
 
     static func detectWorkspaceMarkers(at rootURL: URL, workspaceMarkers: [String]) -> [String] {
@@ -388,18 +402,30 @@ private enum CLIWorkspaceDetector {
         process.executableURL = executableURL
         process.arguments = processArguments
         let outputPipe = Pipe()
+        let errorPipe = Pipe()
         process.standardOutput = outputPipe
-        process.standardError = Pipe()
+        process.standardError = errorPipe
 
         do {
             try process.run()
             process.waitUntilExit()
+
+            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let outputText = String(decoding: outputData, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let errorText = String(decoding: errorData, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let combinedText = [outputText, errorText]
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
             guard process.terminationStatus == 0 else {
-                return nil
+                return combinedText.isEmpty ? nil : combinedText
             }
 
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            return combinedText
         } catch {
             return nil
         }

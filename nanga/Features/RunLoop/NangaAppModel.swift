@@ -18,6 +18,7 @@ final class NangaAppModel {
     var isAgentSelectionLocked: Bool
     var liveAgentEvents: [AgentRuntimeEvent]
     var lastRuntimeError: String?
+    var codexLoginVerificationSignal: CodexLoginVerificationSignal?
 
     convenience init() {
         self.init(
@@ -46,6 +47,7 @@ final class NangaAppModel {
         self.isAgentSelectionLocked = selectedProject?.isAgentSelectionLocked ?? false
         self.liveAgentEvents = []
         self.lastRuntimeError = nil
+        self.codexLoginVerificationSignal = nil
         self.persistenceStatus = ""
 
         if let selectedProject {
@@ -208,6 +210,10 @@ final class NangaAppModel {
         selectedAgentRuntimeID == "codex" && (selectedAgentConnection?.isCLIInstalled == true)
     }
 
+    var canVerifyCodexLogin: Bool {
+        selectedAgentRuntimeID == "codex" && (selectedAgentConnection?.isCLIInstalled == true)
+    }
+
     func saveIterationCheckpoint() {
         guard currentIteration.task.isReadyForExecution else {
             persistenceStatus = "Checkpoint requires a task title and execution detail."
@@ -262,6 +268,9 @@ final class NangaAppModel {
 
     func selectAgentRuntime(id: String) {
         selectedAgentRuntimeID = id
+        if id != "codex" {
+            codexLoginVerificationSignal = nil
+        }
         syncSelectedAgentModel()
         persistAgentSelection(statusMessage: "Updated selected agent.")
     }
@@ -373,6 +382,11 @@ final class NangaAppModel {
                     message: "Opened Terminal for assisted Codex login. It will fall back to standard login if device auth fails."
                 )
             )
+            codexLoginVerificationSignal = CodexLoginVerificationSignal(
+                title: "Waiting for verification",
+                detail: "Complete login in Terminal, then press Verify Login in Nanga.",
+                tone: .neutral
+            )
             persistenceStatus = "Opened Terminal for assisted Codex login. After login, press Verify Login."
         } catch {
             setRuntimeError(error.localizedDescription)
@@ -386,15 +400,31 @@ final class NangaAppModel {
         if selectedAgentRuntimeID == "codex" {
             switch selectedAgentConnection?.authenticationStatus {
             case .loggedIn:
+                codexLoginVerificationSignal = CodexLoginVerificationSignal(
+                    title: "Login verified",
+                    detail: "Codex is authenticated. You can attach and run when ready.",
+                    tone: .success
+                )
                 persistenceStatus = "Codex login is verified."
             case .loginRequired:
+                codexLoginVerificationSignal = CodexLoginVerificationSignal(
+                    title: "Login still required",
+                    detail: "Codex is installed, but login is not complete yet.",
+                    tone: .warning
+                )
                 persistenceStatus = "Codex login is still required."
             default:
+                codexLoginVerificationSignal = CodexLoginVerificationSignal(
+                    title: "Verification unavailable",
+                    detail: "Codex status could not be confirmed in this moment.",
+                    tone: .neutral
+                )
                 persistenceStatus = "Codex connection state refreshed."
             }
             return
         }
 
+        codexLoginVerificationSignal = nil
         persistenceStatus = "Refreshed available agent connections."
     }
 

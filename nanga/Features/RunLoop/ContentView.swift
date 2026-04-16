@@ -711,7 +711,7 @@ struct ContentView: View {
                     .textSelection(.enabled)
             }
 
-            if appModel.requiresSelectedRuntimeLogin && appModel.selectedAgentRuntimeID == "codex" {
+            if appModel.selectedAgentRuntimeID == "codex" {
                 HStack(spacing: 10) {
                     Button("Log In to Codex") {
                         appModel.launchCodexLoginInTerminal()
@@ -723,12 +723,19 @@ struct ContentView: View {
                         appModel.refreshSelectedAgentConnectionState()
                     }
                     .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
+                    .disabled(!appModel.canVerifyCodexLogin)
                 }
 
                 Text("Terminal checks status first, then tries device auth and falls back to `codex login` if needed. Complete login there, then verify here.")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.secondaryText)
-            } else {
+                
+                if let signal = appModel.codexLoginVerificationSignal {
+                    codexLoginSignalRow(signal)
+                }
+            }
+
+            if !appModel.requiresSelectedRuntimeLogin {
                 HStack(spacing: 10) {
                     Button(appModel.selectedAgentSessionID == nil ? "Attach Runtime" : "Re-link Runtime") {
                         Task {
@@ -1055,6 +1062,55 @@ struct ContentView: View {
                 .textSelection(.enabled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func codexLoginSignalRow(_ signal: CodexLoginVerificationSignal) -> some View {
+        let tint = codexLoginSignalTint(signal.tone)
+        let icon = codexLoginSignalIcon(signal.tone)
+
+        return HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(tint)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(signal.title)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(tint)
+                Text(signal.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.secondaryText)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(tint.opacity(0.12))
+        .overlay(HUDFrameShape(cut: 8).stroke(tint.opacity(0.45), lineWidth: 1))
+        .clipShape(HUDFrameShape(cut: 8))
+        .transition(.opacity)
+    }
+
+    private func codexLoginSignalTint(_ tone: CodexLoginVerificationSignal.Tone) -> Color {
+        switch tone {
+        case .success:
+            theme.cyanGlow
+        case .warning:
+            theme.gold
+        case .neutral:
+            theme.cyanMuted
+        }
+    }
+
+    private func codexLoginSignalIcon(_ tone: CodexLoginVerificationSignal.Tone) -> String {
+        switch tone {
+        case .success:
+            "checkmark.circle.fill"
+        case .warning:
+            "exclamationmark.triangle.fill"
+        case .neutral:
+            "info.circle.fill"
+        }
     }
 
     private func runtimeStatusChip(title: String, value: String, tint: Color) -> some View {
