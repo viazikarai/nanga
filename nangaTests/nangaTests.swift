@@ -190,17 +190,17 @@ struct nangaTests {
         )
 
         try "import SwiftUI\nstruct ContentView {}"
-            .write(to: rootURL.appending(path: "nanga/ContentView.swift"), atomically: true, encoding: .utf8)
+            .write(to: rootURL.appending(path: "nanga/Features/RunLoop/ContentView.swift"), atomically: true, encoding: .utf8)
         try "import Foundation\nstruct ProjectStore {}"
-            .write(to: rootURL.appending(path: "nanga/ProjectStore.swift"), atomically: true, encoding: .utf8)
+            .write(to: rootURL.appending(path: "nanga/Core/Persistence/ProjectStore.swift"), atomically: true, encoding: .utf8)
 
         let appModel = NangaAppModel(
             selectedProject: makeProject(
                 rootURL: rootURL,
                 runtimeID: SuccessRuntime().id,
                 candidateFiles: [
-                    CandidateFile(path: "nanga/ContentView.swift", reason: "Relevant", score: 12, isSelected: true),
-                    CandidateFile(path: "nanga/ProjectStore.swift", reason: "Not selected", score: 8, isSelected: false)
+                    CandidateFile(path: "nanga/Features/RunLoop/ContentView.swift", reason: "Relevant", score: 12, isSelected: true),
+                    CandidateFile(path: "nanga/Core/Persistence/ProjectStore.swift", reason: "Not selected", score: 8, isSelected: false)
                 ]
             ),
             projectStore: ProjectStore(baseDirectoryURL: baseDirectoryURL),
@@ -215,7 +215,7 @@ struct nangaTests {
         let history = appModel.iterationHistory
 
         #expect(iteration.execution.status == .refreshed)
-        #expect(iteration.scope.files == ["nanga/ContentView.swift"])
+        #expect(iteration.scope.files == ["nanga/Features/RunLoop/ContentView.swift"])
         #expect(!iteration.savedState.carriedForwardItems.isEmpty)
         #expect(history.count == 1)
         #expect(appModel.selectedAgentSessionID == "test-thread")
@@ -247,14 +247,14 @@ struct nangaTests {
             withIntermediateDirectories: true
         )
         try "struct ContentView {}"
-            .write(to: rootURL.appending(path: "nanga/ContentView.swift"), atomically: true, encoding: .utf8)
+            .write(to: rootURL.appending(path: "nanga/Features/RunLoop/ContentView.swift"), atomically: true, encoding: .utf8)
 
         let appModel = NangaAppModel(
             selectedProject: makeProject(
                 rootURL: rootURL,
                 runtimeID: FailureRuntime().id,
                 candidateFiles: [
-                    CandidateFile(path: "nanga/ContentView.swift", reason: "Relevant", score: 12, isSelected: true)
+                    CandidateFile(path: "nanga/Features/RunLoop/ContentView.swift", reason: "Relevant", score: 12, isSelected: true)
                 ]
             ),
             projectStore: ProjectStore(baseDirectoryURL: baseDirectoryURL),

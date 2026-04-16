@@ -949,7 +949,7 @@ struct NangaProject: Identifiable, Equatable, Codable {
                 savedAt: .now.addingTimeInterval(-3_600),
                 summary: "Saved the first product-shaped iteration frame.",
                 carriedForwardItems: ["task intent", "signal scaffolding", "scope surfaces"],
-                scopedFiles: ["nanga/ContentView.swift", "nanga/NangaAppModel.swift"]
+                scopedFiles: ["nanga/Features/RunLoop/ContentView.swift", "nanga/Features/RunLoop/NangaAppModel.swift"]
             )
         ]
     )
@@ -1040,8 +1040,8 @@ struct IterationState: Equatable, Codable {
             folders: [],
             files: [
                 "nanga/nangaApp.swift",
-                "nanga/ContentView.swift",
-                "nanga/NangaAppModel.swift"
+                "nanga/Features/RunLoop/ContentView.swift",
+                "nanga/Features/RunLoop/NangaAppModel.swift"
             ]
         ),
         execution: ExecutionSummary(
@@ -1059,8 +1059,8 @@ struct IterationState: Equatable, Codable {
             ]
         ),
         candidateFiles: [
-            CandidateFile(path: "nanga/ContentView.swift", reason: "The visible shell lives here.", score: 12, isSelected: true),
-            CandidateFile(path: "nanga/NangaAppModel.swift", reason: "Iteration state is defined here.", score: 11, isSelected: true)
+            CandidateFile(path: "nanga/Features/RunLoop/ContentView.swift", reason: "The visible shell lives here.", score: 12, isSelected: true),
+            CandidateFile(path: "nanga/Features/RunLoop/NangaAppModel.swift", reason: "Iteration state is defined here.", score: 11, isSelected: true)
         ]
     )
 
