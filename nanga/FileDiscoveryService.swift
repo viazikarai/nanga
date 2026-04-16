@@ -205,7 +205,7 @@ struct FileDiscoveryService {
                 selectionSuffix = ""
             }
 
-            CandidateFile(
+            return CandidateFile(
                 id: candidate.id,
                 path: candidate.path,
                 reason: "\(candidate.reason)\(selectionSuffix)",

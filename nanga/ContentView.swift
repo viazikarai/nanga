@@ -10,6 +10,8 @@ struct ContentView: View {
     @State private var selectionHeroVisible = false
     @State private var selectionCloudDrift = false
     @State private var selectionBackgroundPulse = false
+    @State private var runtimePulse = false
+    @State private var isRuntimeDetailsVisible = false
 
     private let sidebarWidth: CGFloat = 280
     private let panelSpacing: CGFloat = 16
@@ -17,6 +19,13 @@ struct ContentView: View {
     private enum InputField {
         case title
         case detail
+    }
+
+    private enum LoopStepState {
+        case done
+        case active
+        case pending
+        case blocked
     }
 
     private enum AppearanceMode: String, CaseIterable, Identifiable {
@@ -264,81 +273,85 @@ struct ContentView: View {
     private func topCommandSurface(iteration: IterationState) -> some View {
         consolePanel(title: "Task Input", symbol: "terminal") {
             VStack(alignment: .leading, spacing: 14) {
-                runtimeLinkStrip
+                runtimeLinkStrip(iteration: iteration)
 
-                HStack(alignment: .top, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        glowingInputShell(title: "Task", isFocused: focusedInput == .title) {
-                            TextField(
-                                "",
-                                text: Binding(
-                                    get: { appModel.currentTaskTitle },
-                                    set: { appModel.currentTaskTitle = $0 }
-                                ),
-                                prompt: Text("State the current task").foregroundStyle(theme.placeholderText)
-                            )
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 20, weight: .semibold))
+                VStack(alignment: .leading, spacing: 12) {
+                    glowingInputShell(title: "Task", isFocused: focusedInput == .title) {
+                        TextField(
+                            "",
+                            text: Binding(
+                                get: { appModel.currentTaskTitle },
+                                set: { appModel.currentTaskTitle = $0 }
+                            ),
+                            prompt: Text("State the current task").foregroundStyle(theme.placeholderText)
+                        )
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(theme.primaryText)
+                        .focused($focusedInput, equals: .title)
+                    }
+
+                    glowingInputShell(title: "Execution Intent", isFocused: focusedInput == .detail) {
+                        ZStack(alignment: .topLeading) {
+                            if appModel.currentTaskDetail.isEmpty {
+                                Text("Describe the exact outcome for this iteration")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(theme.placeholderText)
+                                    .padding(.top, 2)
+                                    .allowsHitTesting(false)
+                            }
+
+                            TextEditor(text: Binding(
+                                get: { appModel.currentTaskDetail },
+                                set: { appModel.currentTaskDetail = $0 }
+                            ))
+                            .scrollContentBackground(.hidden)
+                            .font(.system(size: 13))
                             .foregroundColor(theme.primaryText)
-                            .focused($focusedInput, equals: .title)
-                        }
-
-                        glowingInputShell(title: "Execution Intent", isFocused: focusedInput == .detail) {
-                            ZStack(alignment: .topLeading) {
-                                if appModel.currentTaskDetail.isEmpty {
-                                    Text("Describe the exact outcome for this iteration")
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(theme.placeholderText)
-                                        .padding(.top, 2)
-                                        .allowsHitTesting(false)
-                                }
-
-                                TextEditor(text: Binding(
-                                    get: { appModel.currentTaskDetail },
-                                    set: { appModel.currentTaskDetail = $0 }
-                                ))
-                                .scrollContentBackground(.hidden)
-                                .font(.system(size: 13))
-                                .foregroundColor(theme.primaryText)
-                                .frame(minHeight: 110)
-                                .focused($focusedInput, equals: .detail)
-                            }
+                            .frame(minHeight: 110)
+                            .focused($focusedInput, equals: .detail)
                         }
                     }
-
-                    VStack(alignment: .trailing, spacing: 10) {
-                        Button("Open Folder") {
-                            isImportingProjectRoot = true
-                        }
-                        .buttonStyle(ConsoleButtonStyle(tint: theme.gold))
-
-                        Button("Discover") {
-                            appModel.discoverCandidateFiles()
-                        }
-                        .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
-                        .disabled(!appModel.canDiscoverCandidateFiles)
-
-                        Button("Run") {
-                            Task {
-                                await appModel.runIteration()
-                            }
-                        }
-                        .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
-                        .disabled(!appModel.canRunIteration)
-                    }
-                    .frame(width: 132)
                 }
 
                 HStack(spacing: 10) {
-                    if let selectedAgent = appModel.selectedAgentConnection {
-                        consoleBadge("\(selectedAgent.runtimeName.uppercased()) \(agentStateTitle(for: selectedAgent))", tint: selectedAgent.statusTint(in: theme))
-                        consoleBadge(selectedAgent.status.label.uppercased(), tint: selectedAgent.statusTint(in: theme))
+                    Button("Run Iteration") {
+                        Task {
+                            await appModel.runIteration()
+                        }
                     }
-                    consoleBadge(appModel.hasProjectRoot ? "PROJECT ONLINE" : "PROJECT REQUIRED", tint: appModel.hasProjectRoot ? theme.cyan : theme.cyanMuted)
-                    consoleBadge(iteration.task.isReadyForExecution ? "TASK READY" : "TASK INCOMPLETE", tint: iteration.task.isReadyForExecution ? theme.cyan : theme.cyanMuted)
-                    consoleBadge("\(iteration.candidateFiles.count) CANDIDATES", tint: theme.cyanMuted)
-                    consoleBadge("\(appModel.selectedFileCount) IN SCOPE", tint: theme.cyanMuted)
+                    .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
+                    .disabled(!appModel.canRunIteration)
+
+                    Button("Refresh Scope") {
+                        appModel.discoverCandidateFiles()
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
+                    .disabled(!appModel.canDiscoverCandidateFiles)
+
+                    Menu {
+                        Button(appModel.hasProjectRoot ? "Change Folder" : "Select Folder") {
+                            isImportingProjectRoot = true
+                        }
+
+                        Button("Refresh Agent Status") {
+                            appModel.refreshSelectedAgentConnectionState()
+                        }
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(theme.secondaryText)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(theme.cyanMuted.opacity(0.12))
+                            .overlay(HUDFrameShape(cut: 8).stroke(theme.cyanMuted.opacity(0.45), lineWidth: 1))
+                            .clipShape(HUDFrameShape(cut: 8))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .buttonStyle(.plain)
                 }
+
+                taskReadinessLine(iteration: iteration)
             }
         }
     }
@@ -667,62 +680,36 @@ struct ContentView: View {
         }
     }
 
-    private var runtimeLinkStrip: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("NANGA ↔ \(appModel.selectedRuntimeName.uppercased())")
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(theme.gold)
-
-            HStack(spacing: 8) {
-                runtimeStatusChip(
-                    title: "CLI",
-                    value: appModel.selectedRuntimeInstallState,
-                    tint: appModel.selectedRuntimeInstallState == "Installed" ? theme.cyan : theme.secondaryText
-                )
-                runtimeStatusChip(
-                    title: "LOGIN",
-                    value: appModel.selectedRuntimeAuthenticationState,
-                    tint: appModel.selectedRuntimeAuthenticationState == "Logged In" ? theme.cyan : theme.gold
-                )
-                runtimeStatusChip(
-                    title: "ATTACH",
-                    value: appModel.selectedRuntimeAttachState,
-                    tint: appModel.selectedRuntimeAttachState == "Attached" ? theme.cyanGlow : theme.cyanMuted
-                )
-            }
-            .fixedSize(horizontal: false, vertical: true)
-
-            if let sessionID = appModel.selectedAgentSessionID {
-                Text("thread_id \(sessionID)")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(theme.cyanGlow)
-                    .textSelection(.enabled)
+    private func runtimeLinkStrip(iteration: IterationState) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("HUMAN LOOP · NANGA ↔ \(appModel.selectedRuntimeName.uppercased())")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(theme.gold)
+                Spacer()
+                Button(isRuntimeDetailsVisible ? "Hide Details" : "Show Details") {
+                    withAnimation(.easeInOut(duration: 0.24)) {
+                        isRuntimeDetailsVisible.toggle()
+                    }
+                }
+                .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
+                .frame(width: 140)
             }
 
-            if !appModel.selectedRuntimeWorkspaceMarkers.isEmpty {
-                Text("Markers: \(appModel.selectedRuntimeWorkspaceMarkers.joined(separator: ", "))")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(theme.secondaryText)
-                    .lineLimit(2)
-            }
+            humanLoopTrack(iteration: iteration)
 
-            Text("Last event: \(appModel.latestAgentEventMessage)")
-                .font(.system(size: 11))
-                .foregroundStyle(theme.secondaryText)
-                .lineLimit(2)
+            Text(runtimeGuidanceText(iteration: iteration))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(theme.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let lastRuntimeError = appModel.lastRuntimeError {
-                Text("Last error: \(lastRuntimeError)")
+                Text("Needs attention: \(lastRuntimeError)")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(.red)
                     .lineLimit(3)
                     .textSelection(.enabled)
             }
-
-            Text(appModel.selectedAgentConnection?.detail ?? "No agent selected.")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(theme.primaryText)
-                .textSelection(.enabled)
 
             if appModel.requiresSelectedRuntimeLogin && appModel.selectedAgentRuntimeID == "codex" {
                 HStack(spacing: 10) {
@@ -738,28 +725,66 @@ struct ContentView: View {
                     .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
                 }
 
-                Text("Nanga opens Terminal and runs `codex login --device-auth`. Finish auth there, then verify here.")
+                Text("Terminal checks status first, then tries device auth and falls back to `codex login` if needed. Complete login there, then verify here.")
                     .font(.system(size: 11))
                     .foregroundStyle(theme.secondaryText)
-                    .lineLimit(2)
+            } else {
+                HStack(spacing: 10) {
+                    Button(appModel.selectedAgentSessionID == nil ? "Attach Runtime" : "Re-link Runtime") {
+                        Task {
+                            if appModel.selectedAgentSessionID == nil {
+                                await appModel.linkSelectedAgentNow()
+                            } else {
+                                await appModel.relinkSelectedAgentNow()
+                            }
+                        }
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tint: appModel.selectedAgentSessionID == nil ? theme.cyan : theme.cyanMuted))
+                    .disabled(!appModel.isAgentSelectionLocked || !appModel.hasProjectRoot)
+
+                    Button("Refresh Status") {
+                        appModel.refreshSelectedAgentConnectionState()
+                    }
+                    .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
+                }
             }
 
-            HStack(spacing: 10) {
-                Button("Link Now") {
-                    Task {
-                        await appModel.linkSelectedAgentNow()
+            if isRuntimeDetailsVisible {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        runtimeStatusChip(
+                            title: "CLI",
+                            value: appModel.selectedRuntimeInstallState,
+                            tint: appModel.selectedRuntimeInstallState == "Installed" ? theme.cyan : theme.secondaryText
+                        )
+                        runtimeStatusChip(
+                            title: "LOGIN",
+                            value: appModel.selectedRuntimeAuthenticationState,
+                            tint: appModel.selectedRuntimeAuthenticationState == "Logged In" ? theme.cyan : theme.gold
+                        )
+                        runtimeStatusChip(
+                            title: "ATTACH",
+                            value: appModel.selectedRuntimeAttachState,
+                            tint: appModel.selectedRuntimeAttachState == "Attached" ? theme.cyanGlow : theme.cyanMuted
+                        )
                     }
-                }
-                .buttonStyle(ConsoleButtonStyle(tint: theme.cyan))
-                .disabled(!appModel.isAgentSelectionLocked || !appModel.hasProjectRoot || appModel.requiresSelectedRuntimeLogin)
 
-                Button("Re-link") {
-                    Task {
-                        await appModel.relinkSelectedAgentNow()
+                    if let sessionID = appModel.selectedAgentSessionID {
+                        runtimeDetailRow("thread_id", value: sessionID, tint: theme.cyanGlow)
                     }
+
+                    if !appModel.selectedRuntimeWorkspaceMarkers.isEmpty {
+                        runtimeDetailRow("markers", value: appModel.selectedRuntimeWorkspaceMarkers.joined(separator: ", "), tint: theme.secondaryText)
+                    }
+
+                    runtimeDetailRow("last_event", value: appModel.latestAgentEventMessage, tint: theme.secondaryText)
+                    runtimeDetailRow("runtime", value: appModel.selectedAgentConnection?.detail ?? "No agent selected.", tint: theme.primaryText)
                 }
-                .buttonStyle(ConsoleButtonStyle(tint: theme.cyanMuted))
-                .disabled(!appModel.isAgentSelectionLocked || !appModel.hasProjectRoot || appModel.requiresSelectedRuntimeLogin)
+                .padding(10)
+                .background(theme.panelBackground.opacity(0.45))
+                .overlay(HUDFrameShape(cut: 8).stroke(theme.border, lineWidth: 1))
+                .clipShape(HUDFrameShape(cut: 8))
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -767,6 +792,12 @@ struct ContentView: View {
         .background(theme.raisedBackground)
         .overlay(HUDFrameShape(cut: 10).stroke(theme.border, lineWidth: 1))
         .clipShape(HUDFrameShape(cut: 10))
+        .onAppear {
+            guard !runtimePulse else { return }
+            withAnimation(.easeInOut(duration: 1.9).repeatForever(autoreverses: true)) {
+                runtimePulse = true
+            }
+        }
     }
 
     private var runtimeExecutionDetail: String {
@@ -777,6 +808,253 @@ struct ContentView: View {
             return "Last attach/run error: \(runtimeError)"
         }
         return appModel.selectedAgentConnection?.detail ?? "No runtime selected."
+    }
+
+    private func taskReadinessLine(iteration: IterationState) -> some View {
+        let status = taskReadinessStatus(iteration: iteration)
+
+        return HStack(spacing: 8) {
+            Circle()
+                .fill(status.tint.opacity(0.9))
+                .frame(width: 8, height: 8)
+            Text(status.message)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(status.tint)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(status.tint.opacity(0.10))
+        .overlay(HUDFrameShape(cut: 8).stroke(status.tint.opacity(0.32), lineWidth: 1))
+        .clipShape(HUDFrameShape(cut: 8))
+    }
+
+    private func taskReadinessStatus(iteration: IterationState) -> (message: String, tint: Color) {
+        if !appModel.hasProjectRoot {
+            return ("Select an approved folder to begin.", theme.secondaryText)
+        }
+
+        if appModel.requiresSelectedRuntimeLogin {
+            return ("Codex login is required before attach.", theme.gold)
+        }
+
+        if !iteration.task.isReadyForExecution {
+            return ("Define task and intent to unlock scoped discovery.", theme.secondaryText)
+        }
+
+        if appModel.selectedFileCount == 0 {
+            return ("Refresh scope and approve at least one file.", theme.cyanMuted)
+        }
+
+        if !appModel.isAgentSelectionLocked {
+            return ("Choose and lock your runtime before running.", theme.cyanMuted)
+        }
+
+        if let sessionID = appModel.selectedAgentSessionID {
+            return ("Ready on thread \(sessionID.prefix(8)). You stay in control of Run.", theme.cyanGlow)
+        }
+
+        return ("Ready. Press Run when your scoped files look correct.", theme.cyan)
+    }
+
+    private func runtimeGuidanceText(iteration: IterationState) -> String {
+        if !isConnectStepComplete() {
+            if appModel.requiresSelectedRuntimeLogin {
+                return "Connect first. Complete Codex login, then verify before linking."
+            }
+            return "Connect first. Install or re-detect the runtime before continuing."
+        }
+
+        if !isLinkStepComplete() {
+            return "Connected. Link this workspace to a runtime thread before task execution."
+        }
+
+        if !appModel.hasProjectRoot {
+            return "Choose a project folder first. Nanga only reads the folder you approve."
+        }
+
+        if !iteration.task.isReadyForExecution {
+            return "Linked and ready. Write the task and execution intent to keep scope bounded."
+        }
+
+        if appModel.selectedFileCount == 0 {
+            return "Task is set. Review scope next. You decide what Codex can see."
+        }
+
+        if appModel.selectedAgentSessionID != nil {
+            return "Attached and calm. Run only when the scope reflects your intent."
+        }
+
+        return "Connect, link, task, and scope are ready. Run when you want to execute."
+    }
+
+    private func humanLoopTrack(iteration: IterationState) -> some View {
+        let steps: [(number: String, title: String, state: LoopStepState)] = [
+            ("1", "Connect", connectLoopStepState()),
+            ("2", "Link", linkLoopStepState()),
+            ("3", "Task", taskLoopStepState(iteration: iteration)),
+            ("4", "Scope", scopeLoopStepState(iteration: iteration)),
+            ("5", "Run", runLoopStepState(iteration: iteration))
+        ]
+
+        return HStack(spacing: 8) {
+            ForEach(steps.indices, id: \.self) { index in
+                let step = steps[index]
+                loopStepBadge(number: step.number, title: step.title, state: step.state)
+
+                if index < steps.count - 1 {
+                    Rectangle()
+                        .fill(step.state == .done ? theme.cyan.opacity(0.65) : theme.border.opacity(0.8))
+                        .frame(height: 1)
+                }
+            }
+        }
+    }
+
+    private func taskLoopStepState(iteration: IterationState) -> LoopStepState {
+        guard isLinkStepComplete() else {
+            return .pending
+        }
+
+        iteration.task.isReadyForExecution ? .done : .active
+    }
+
+    private func scopeLoopStepState(iteration: IterationState) -> LoopStepState {
+        guard iteration.task.isReadyForExecution else {
+            return .pending
+        }
+
+        if appModel.selectedFileCount > 0 {
+            return .done
+        }
+
+        if appModel.hasProjectRoot {
+            return .active
+        }
+
+        return .pending
+    }
+
+    private func connectLoopStepState() -> LoopStepState {
+        guard let connection = appModel.selectedAgentConnection else {
+            return .pending
+        }
+
+        if connection.status == .unavailable || !connection.isCLIInstalled {
+            return .blocked
+        }
+
+        if appModel.requiresSelectedRuntimeLogin {
+            return .active
+        }
+
+        return .done
+    }
+
+    private func linkLoopStepState() -> LoopStepState {
+        guard isConnectStepComplete() else {
+            return appModel.requiresSelectedRuntimeLogin ? .blocked : .pending
+        }
+
+        if isLinkStepComplete() {
+            return .done
+        }
+
+        if appModel.hasProjectRoot && appModel.isAgentSelectionLocked {
+            return .active
+        }
+
+        return .pending
+    }
+
+    private func runLoopStepState(iteration: IterationState) -> LoopStepState {
+        if iteration.execution.status == .refreshed {
+            return .done
+        }
+
+        if iteration.execution.status == .running || appModel.canRunIteration {
+            return .active
+        }
+
+        if !isScopeStepComplete(iteration: iteration) {
+            return .pending
+        }
+
+        if !isConnectStepComplete() {
+            return .blocked
+        }
+
+        return .pending
+    }
+
+    private func isConnectStepComplete() -> Bool {
+        guard let connection = appModel.selectedAgentConnection else {
+            return false
+        }
+
+        return connection.isCLIInstalled && connection.status != .unavailable && !appModel.requiresSelectedRuntimeLogin
+    }
+
+    private func isLinkStepComplete() -> Bool {
+        appModel.selectedAgentSessionID != nil
+    }
+
+    private func isScopeStepComplete(iteration: IterationState) -> Bool {
+        iteration.task.isReadyForExecution && appModel.selectedFileCount > 0
+    }
+
+    private func loopStepBadge(number: String, title: String, state: LoopStepState) -> some View {
+        let tint = loopStepTint(for: state)
+
+        return VStack(spacing: 4) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(state == .done ? 0.28 : 0.16))
+                    .frame(width: 24, height: 24)
+                    .overlay(
+                        Circle()
+                            .stroke(tint.opacity(0.55), lineWidth: 1)
+                    )
+                    .scaleEffect((state == .active || state == .blocked) && runtimePulse ? 1.08 : 1.0)
+                    .shadow(color: tint.opacity((state == .active || state == .blocked) ? 0.28 : 0.0), radius: 8, x: 0, y: 0)
+                Text(number)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(tint)
+            }
+
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tint)
+        }
+        .frame(width: 52)
+        .animation(.easeInOut(duration: 0.32), value: state)
+    }
+
+    private func loopStepTint(for state: LoopStepState) -> Color {
+        switch state {
+        case .done:
+            theme.cyan
+        case .active:
+            theme.cyanGlow
+        case .pending:
+            theme.secondaryText
+        case .blocked:
+            theme.gold
+        }
+    }
+
+    private func runtimeDetailRow(_ label: String, value: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("\(label):")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(theme.secondaryText)
+            Text(value)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(tint)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func runtimeStatusChip(title: String, value: String, tint: Color) -> some View {

@@ -366,14 +366,14 @@ final class NangaAppModel {
 
         do {
             let workingRoot = activeProjectRootURL ?? selectedProject.rootFolder?.resolvedURL
-            try TerminalCommandLauncher.openCodexDeviceLogin(workingRootURL: workingRoot)
+            try TerminalCommandLauncher.openCodexLoginAssisted(workingRootURL: workingRoot)
             recordAgentEvent(
                 AgentRuntimeEvent(
                     kind: .status,
-                    message: "Opened Terminal for Codex login. Complete login there, then press Verify Login."
+                    message: "Opened Terminal for assisted Codex login. It will fall back to standard login if device auth fails."
                 )
             )
-            persistenceStatus = "Opened Terminal for Codex device login."
+            persistenceStatus = "Opened Terminal for assisted Codex login. After login, press Verify Login."
         } catch {
             setRuntimeError(error.localizedDescription)
             persistenceStatus = "Failed to open Terminal for Codex login: \(error.localizedDescription)"
@@ -782,7 +782,7 @@ final class NangaAppModel {
             }
         }
 
-        if let selected = selectedAgentConnection, !selected.canExecute {
+        if let selected = selectedAgentConnection, selected.status == .unavailable {
             isAgentSelectionLocked = false
         }
 
@@ -837,9 +837,26 @@ final class NangaAppModel {
 }
 
 private enum TerminalCommandLauncher {
-    static func openCodexDeviceLogin(workingRootURL: URL?) throws {
+    static func openCodexLoginAssisted(workingRootURL: URL?) throws {
         let workingPath = (workingRootURL ?? URL(filePath: NSHomeDirectory())).path(percentEncoded: false)
-        let shellCommand = "cd \(shellSingleQuoted(workingPath)); codex login --device-auth"
+        let shellCommand = """
+        cd \(shellSingleQuoted(workingPath));
+        if codex login status 2>/dev/null | grep -qi "logged in"; then
+            echo "Codex is already logged in."
+        else
+            echo "Starting Codex device login..."
+            codex login --device-auth
+            if [ $? -ne 0 ]; then
+                echo "Device auth failed (403 can happen). Trying standard login..."
+                codex login
+                if [ $? -ne 0 ]; then
+                    echo "Codex login failed. You can use API key login:"
+                    echo "printenv OPENAI_API_KEY | codex login --with-api-key"
+                fi
+            fi
+        fi
+        echo "When login succeeds, return to Nanga and press Verify Login."
+        """
         let script = """
         tell application "Terminal"
             activate
