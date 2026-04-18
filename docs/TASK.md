@@ -1,46 +1,25 @@
-# Task Backlog
+# roadmap
 
-## Milestone Focus
+## current focus
 
-make nanga the default memory optimizer skill for smaller context windows:
+make context-anchor a reliable markdown skill for bounded memory carry-forward.
 
-`task -> signal -> scope -> keep/defer/drop -> compact prompt`
+## done
 
-## Completed Foundation
+- [x] canonical `SKILL.md` with deterministic process and output template
+- [x] markdown-first repository structure
+- [x] install guidance for skill-folder and submodule usage
+- [x] example input and output docs
 
-- [x] deterministic task-to-signal shaping
-- [x] deterministic scope discovery with explicit reasons
-- [x] auto-selection of top-signal files
-- [x] bounded execution package construction
-- [x] keep/defer/drop memory partitioning with token budget
-- [x] terminal skill surface (`context-anchor`)
-- [x] unit coverage for scope and run-loop state transitions
-- [x] unit coverage for skill budgeting behavior
+## next
 
-## P0 Next Tasks
+- [ ] add more examples for codex, claude code, and local model runs
+- [ ] define a compact scoring rubric for keep/deferred decisions
+- [ ] add troubleshooting notes for conflicting memory facts
+- [ ] add versioned changelog entries for skill behavior changes
 
-- [ ] calibrate token estimator against real model tokenizers
-- [ ] add json output mode for tool-chain integration
-- [ ] add explicit confidence scoring for each keep/defer item
-- [ ] add stronger note normalization for long noisy logs
-- [ ] add regression fixtures for small-context failure cases
+## quality bar
 
-## P1 Follow-Up Tasks
-
-- [ ] add plugin-ready schema docs for codex/claude/cursor workflows
-- [ ] add reproducibility snapshot tests for compact prompt output
-- [ ] add artifact-first refresh mode to reduce stale carry-forward state
-- [ ] add benchmark script for success rate at 4k/8k context budgets
-
-## P2 Expansion Tasks
-
-- [ ] model-family profiles (aggressive, balanced, conservative memory)
-- [ ] optional minimal local inspector surface for debugging only
-- [ ] lightweight export bundle for handoff and audit trails
-
-## Definition Of Done (Current Milestone)
-
-- [ ] same input always yields the same keep/defer/drop ordering
-- [ ] compact prompt stays within configured budget envelope
-- [ ] skill output is understandable without opening source code
-- [ ] 4k-context runs show lower failure from forgotten constraints
+- [ ] same input should produce equivalent keep/deferred/drop structure
+- [ ] outputs must be concise and easy to audit
+- [ ] compact prompt must include only required carry-forward context

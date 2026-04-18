@@ -1,60 +1,63 @@
 # context-anchor skill
 
-context-anchor is a memory-optimization skill for smaller context windows.
+context-anchor is a memory skill that compresses noisy task context into bounded, high-signal carry-forward state.
 
-## Input
+## when to use
 
-Required:
-- `task` (title)
-- `intent` (desired outcome)
-- `root` (approved folder)
+use this skill when:
+- the model has a small context window
+- the run has accumulated noisy notes/transcript fragments
+- you need deterministic memory carry-forward between iterations
 
-Optional:
-- `scope-file` (repeatable previous scope file)
-- `note` (repeatable recent note/output)
-- `signal-budget` (default `8`)
-- `scope-budget` (default `4`)
-- `token-budget` (default `700`)
+## input contract
 
-## Output
+required:
+- `task`: short current goal
+- `intent`: exact expected outcome this iteration
 
-- bounded `signal`
-- ranked `candidate files`
-- selected `scope`
-- `keep/defer/drop` memory buckets
-- `compact prompt` for next turn
+optional:
+- `constraints`: non-negotiable limits
+- `scope`: files/surfaces explicitly allowed
+- `notes`: recent observations/results
+- `budget`: max memory item count or token budget
 
-## Run
+## process
 
-```bash
-swift run context-anchor \
-  --root /path/to/repo \
-  --task "improve run-loop memory" \
-  --intent "keep constraints and scoped files, defer low-value notes" \
-  --note "avoid transcript bloat" \
-  --token-budget 280
+1. parse task and intent
+2. extract candidate memory items
+3. score each item by decision impact and recency
+4. bucket into `keep`, `deferred`, `drop`
+5. produce compact next-turn prompt from `keep` + required `scope`
+
+## output contract
+
+always return these sections:
+
+- `keep`: must-carry-forward items
+- `deferred`: useful but not required now
+- `drop`: explicitly discarded noise
+- `compact_prompt`: next-turn prompt using only required memory
+
+## hard rules
+
+- be deterministic for same input
+- keep scope explicit and bounded
+- prefer concise structured memory over transcript dumps
+- do not carry style chatter or duplicate status lines
+- if information conflicts, preserve newest verified fact and flag uncertainty
+
+## output template
+
+```text
+keep:
+- ...
+
+deferred:
+- ...
+
+drop:
+- ...
+
+compact_prompt:
+...
 ```
-
-## Install
-
-```bash
-swift build -c release --product context-anchor
-```
-
-or npm global install:
-
-```bash
-npm install -g context-anchor
-```
-
-note:
-- npm install currently builds from source at install time
-- users need a working swift toolchain
-
-## Design Rules
-
-- deterministic ordering
-- bounded output
-- scope-first behavior
-- carry-forward only what changes decisions
-- no hidden transcript expansion

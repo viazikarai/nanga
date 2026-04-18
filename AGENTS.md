@@ -1,183 +1,100 @@
 # AGENTS.md
 
-## Technical Brief
+## technical brief
 
-Target:
-- macOS 15.0+
-- Swift 6.2+
-- strict Swift Concurrency
-- terminal-first skill surfaces
+target:
+- markdown-first skill repository
+- deterministic, auditable skill behavior
+- agent-agnostic usage across codex, claude code, and similar tools
 
-Code must be:
+content must be:
 - scoped
 - current
 - predictable
-- testable
+- testable through examples
 
-## Product Scope
+## product scope
 
-Primary scope:
-- skill-first agent execution model
-- signal extraction and scope resolution
-- memory optimization for smaller context windows
-- bounded prompt/package construction
-- carry-forward state for iterative turns
-- terminal and engine tooling surfaces
+primary scope:
+- `SKILL.md` as the canonical behavior contract
+- supporting markdown docs and examples
+- installation guidance for local skill usage
+- versioned, reviewable changes to behavior and outputs
 
-Secondary scope (optional):
-- lightweight local inspector surfaces for debugging
+out of scope:
+- compiled app surfaces
+- platform-specific ui/runtime code
+- package manager wrappers as the primary surface
 
-Out of scope for this repository:
-- full premium macOS operator app surface
-- workspace/project management UX as a product
-- broad UI polish tracks
+## repository surfaces
 
-Do not collapse the boundary.
-The repository is a skill and core runtime project.
+- `SKILL.md`
+- `README.md`
+- `docs/` for roadmap/workflow notes
+- `examples/` for realistic input/output references
 
-## Product Surfaces
-
-- task + intent input contract
-- approved-root scope discovery
-- keep/defer/drop memory output
-- bounded prompt output
-- carry-forward state output per iteration
-- terminal execution surface
-
-## Agent Constraints
+## agent constraints
 
 - start from the current task
-- inspect only the required code
-- stay inside the active feature or runtime surface
-- avoid unrelated edits
-- keep diffs small when the problem is local
-- explain the final result precisely
+- inspect only required files
+- keep diffs small and local
+- avoid unrelated rewrites
+- explain final results precisely
 
-## Learning Goals
+## learning goals
 
-The agent should use this project to teach:
+this repository should teach:
+- how to define a deterministic skill contract
+- how to compress noisy context into bounded signal
+- how to keep scope explicit between iterations
+- how to evolve a skill through small, auditable markdown changes
 
-Swift:
-- modeling deterministic transformations
-- async/await and structured concurrency in runtime code
-- choosing modern Apple APIs over legacy patterns
-- writing small, composable types and focused functions
+## architecture
 
-Skill workflows:
-- turning noisy input into bounded signal
-- defining and enforcing scope before execution
-- refreshing context from results instead of stale assumptions
-- persisting only the state that should carry into the next iteration
-- making small-context models behave more reliably
-
-## Architecture
-
-Prefer feature ownership over file-type grouping.
+prefer a simple, explicit structure:
 
 ```text
-Core/
-  SignalExtraction/
-  ScopeResolution/
-  PromptCompilation/
-  AgentRuntime/
-  Persistence/
-
-SkillCLI/
-
+SKILL.md
+README.md
 docs/
+examples/
 ```
 
-Rules:
-- keep skill logic in `Core/SignalExtraction` + `Core/ScopeResolution`
-- keep prompt assembly focused and explicit
-- introduce shared code only after a second concrete use
-- do not create generic shared folders
+rules:
+- keep behavior rules in `SKILL.md`
+- keep install/overview in `README.md`
+- keep process and roadmap in `docs/`
+- keep realistic use cases in `examples/`
 
-## Swift
+## writing quality
 
-Required:
-- async/await where modern APIs exist
-- structured concurrency
-- Swift-native APIs over legacy Foundation patterns
-- explicit data flow
-- focused functions
-- one primary type per file when practical
+required:
+- concise language
+- deterministic instructions
+- explicit input/output contracts
+- no ambiguous optional behavior unless clearly labeled
 
-Forbidden:
-- force unwraps
-- `try!`
+avoid:
+- hidden assumptions
+- transcript-style noise
+- contradictory rules across files
 
-Use APIs such as `URL.documentsDirectory` and `appending(path:)`.
+## validation
 
-## State
+before finalizing changes:
+- verify `SKILL.md` remains the source of truth
+- ensure docs/examples match current skill behavior
+- ensure install steps are accurate and minimal
+- confirm repository remains markdown-first
 
-Preferred:
-- explicit value types for skill input/output contracts
-- deterministic scoring and ordering logic
-- stable formatting for carry-forward output
-
-Avoid:
-- implicit global state
-- hidden heuristics with non-deterministic ordering
-
-## Persistence
-
-- persist only data that survives refresh
-- separate durable project state from transient execution state
-- derive refreshed signal from resulting artifacts
-- keep carry-forward state explicit
-
-Avoid:
-- raw context dumps
-- storing transient state as resumable state
-- persisting data that should be recomputed during refresh
-
-## Tests And Validation
-
-Required coverage:
-- signal extraction
-- scope resolution
-- prompt budgeting and keep/defer/drop behavior
-- persistence and reload
-- carry-forward state transitions
-- business logic and transformations
-
-Prefer unit tests for logic and state transitions.
-
-Validate with SwiftPM when applicable:
-- build
-- test
-- warnings
-
-## Naming And Quality
-
-- keep files focused
-- avoid duplication
-- keep state transitions easy to trace
-- comment only when recovering non-obvious logic
-
-Prefer:
-- signal
-- scope
-- iteration
-- refresh
-- prompt
-- resulting state
-
-Avoid:
-- manager
-- handler
-- data
-
-## Security
+## security
 
 - never include secrets
-- use secure storage where required
-- treat task content as intentional user data
+- treat task content examples as intentional user data
 
-## Commits
+## commits
 
-Use:
+use:
 - `feat:`
 - `fix:`
 - `refactor:`
@@ -185,4 +102,4 @@ Use:
 - `docs:`
 - `chore:`
 
-Commit subjects must be lowercase after the prefix and describe the actual change.
+commit subjects must be lowercase after the prefix and describe the actual change.
