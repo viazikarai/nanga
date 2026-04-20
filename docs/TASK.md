@@ -19,12 +19,14 @@ make context-anchor a reliable markdown skill for bounded memory carry-forward.
 - [x] markdown-first repository structure
 - [x] install guidance for skill-folder and submodule usage
 - [x] example input and output docs
+- [x] deterministic conflict troubleshooting flow documented in `SKILL.md`
+- [x] conflict-focused example added under `examples/`
 
 ## next
 
 - [ ] add more examples for codex, claude code, and local model runs
 - [x] define a compact scoring rubric for keep/deferred decisions
-- [ ] add troubleshooting notes for conflicting memory facts
+- [x] add troubleshooting notes for conflicting memory facts
 - [ ] add versioned changelog entries for skill behavior changes
 
 ## why each next item matters
@@ -37,7 +39,7 @@ make context-anchor a reliable markdown skill for bounded memory carry-forward.
   solves: decision drift between runs on the same input.
   strengthens: `f1`, `f3`.
   outcome: more repeatable ranking logic for decision impact and recency.
-- [ ] add troubleshooting notes for conflicting memory facts
+- [x] add troubleshooting notes for conflicting memory facts
   solves: uncertainty about which fact should survive when notes conflict.
   strengthens: `f5`.
   outcome: deterministic resolution steps for stale, partial, or conflicting evidence.

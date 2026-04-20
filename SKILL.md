@@ -26,8 +26,9 @@ optional:
 1. parse task and intent
 2. extract candidate memory items
 3. score each item by decision impact and recency
-4. bucket into `keep`, `deferred`, `drop`
-5. produce compact next-turn prompt from `keep` + required `scope`
+4. resolve conflicts for competing facts
+5. bucket into `keep`, `deferred`, `drop`
+6. produce compact next-turn prompt from `keep` + required `scope`
 
 ## scoring rubric
 
@@ -63,6 +64,22 @@ hard overrides:
 - deduplicate semantically equivalent items; keep the highest-ranked version
 - on conflict, keep newest verified fact and move older conflicting facts to `drop`
 - if `budget` is set, keep only the top-ranked `keep` items within budget and move overflow to `deferred`
+
+## conflict troubleshooting
+
+use this sequence when two or more items assert different values for the same claim:
+
+1. normalize a claim key as `<entity>.<field>` (example: `migration.status`)
+2. for each conflicting candidate, record:
+   - verification state: `verified` or `unverified`
+   - recency source: explicit timestamp when available, otherwise input order
+3. choose the winner:
+   - if any `verified` candidates exist, select the newest `verified` candidate
+   - if none are `verified`, select the newest candidate and label it `[uncertain]`
+4. move non-winning conflicting items to `drop` with reason tags:
+   - `[conflict:superseded]` for older conflicting facts
+   - `[conflict:unverified]` for conflicting unverified claims discarded in favor of verified facts
+5. if recency and verification are equal, prefer earlier appearance in input
 
 ## output contract
 

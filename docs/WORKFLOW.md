@@ -21,5 +21,7 @@ each change should:
 
 - is the output contract still deterministic?
 - did scope boundaries remain explicit?
+- do conflict-resolution rules still produce a single deterministic winner?
 - does compact prompt avoid transcript noise?
 - do examples still match the current skill rules?
+- does `README.md` describe behavior without contradicting `SKILL.md`?

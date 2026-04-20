@@ -12,6 +12,7 @@ it helps models keep only decision-critical context by producing bounded memory 
 
 - deterministic memory framing from task + intent
 - deterministic scoring rubric using impact + recency with fixed thresholds
+- deterministic conflict resolution for stale, conflicting, or unverified facts
 - explicit scope framing from approved files/surfaces
 - bounded keep/deferred/drop outputs
 - compact prompt handoff format for next turn
@@ -22,6 +23,21 @@ it helps models keep only decision-critical context by producing bounded memory 
 - confidence labels and calibration on top of the scoring rubric
 - artifact-driven refresh guidance after each run
 - more examples for codex, claude code, and local model workflows
+
+## run the skill in your loop
+
+1. load `SKILL.md` as the behavior contract in your memory-compression step.
+2. send structured input with at least:
+   - `task`
+   - `intent`
+   - optional `constraints`, `scope`, `notes`, `budget`
+3. parse returned sections:
+   - `keep`
+   - `deferred`
+   - `drop`
+   - `compact_prompt`
+4. pass only `keep` + `compact_prompt` into the next execution turn.
+5. persist `deferred` for later, and do not carry `drop` forward.
 
 ## install this skill in your actual project
 
@@ -54,3 +70,13 @@ then reference `tools/context-anchor/SKILL.md` in your workflow/tooling.
 - `README.md`: overview and install guidance
 - `docs/`: roadmap + workflow notes
 - `examples/`: concrete usage examples
+
+## documentation map
+
+- contract: `SKILL.md` (source of truth)
+- roadmap: `docs/TASK.md`
+- change process: `docs/WORKFLOW.md`
+- examples:
+  - `examples/basic-use.md`
+  - `examples/conflicting-facts.md`
+  - `examples/output-example.md`
