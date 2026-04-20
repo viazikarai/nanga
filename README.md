@@ -11,6 +11,7 @@ it helps models keep only decision-critical context by producing bounded memory 
 ## what works now
 
 - deterministic memory framing from task + intent
+- deterministic scoring rubric using impact + recency with fixed thresholds
 - explicit scope framing from approved files/surfaces
 - bounded keep/deferred/drop outputs
 - compact prompt handoff format for next turn
@@ -18,7 +19,7 @@ it helps models keep only decision-critical context by producing bounded memory 
 
 ## what is next
 
-- richer confidence scoring per memory item
+- confidence labels and calibration on top of the scoring rubric
 - artifact-driven refresh guidance after each run
 - more examples for codex, claude code, and local model workflows
 
