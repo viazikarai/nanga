@@ -25,3 +25,4 @@ each change should:
 - does compact prompt avoid transcript noise?
 - do examples still match the current skill rules?
 - does `README.md` describe behavior without contradicting `SKILL.md`?
+- are there stale files or references that can be removed to keep the repo minimal?

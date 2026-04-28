@@ -1,28 +1,6 @@
 # context-anchor
 
-context-anchor is an agent-agnostic memory skill for smaller context windows.
-
-it helps models keep only decision-critical context by producing bounded memory blocks:
-- keep
-- deferred
-- drop
-- compact next-turn prompt
-
-## what works now
-
-- deterministic memory framing from task + intent
-- deterministic scoring rubric using impact + recency with fixed thresholds
-- deterministic conflict resolution for stale, conflicting, or unverified facts
-- explicit scope framing from approved files/surfaces
-- bounded keep/deferred/drop outputs
-- compact prompt handoff format for next turn
-- markdown-first skill contract in `SKILL.md`
-
-## what is next
-
-- confidence labels and calibration on top of the scoring rubric
-- artifact-driven refresh guidance after each run
-- more examples for codex, claude code, and local model workflows
+context-anchor is a markdown-first, agent-agnostic memory skill for constrained context windows.
 
 ## run the skill in your loop
 
@@ -38,6 +16,14 @@ it helps models keep only decision-critical context by producing bounded memory 
    - `compact_prompt`
 4. pass only `keep` + `compact_prompt` into the next execution turn.
 5. persist `deferred` for later, and do not carry `drop` forward.
+
+## behavior guarantees
+
+- deterministic output shape for the same input
+- explicit scope and constraint carry-forward
+- fixed scoring and bucketing for `keep`, `deferred`, `drop`
+- deterministic conflict resolution for competing facts
+- compact next-turn prompt built from required carry-forward state
 
 ## install this skill in your actual project
 
@@ -66,17 +52,9 @@ then reference `tools/context-anchor/SKILL.md` in your workflow/tooling.
 
 ## repository structure
 
-- `SKILL.md`: canonical skill definition
-- `README.md`: overview and install guidance
-- `docs/`: roadmap + workflow notes
-- `examples/`: concrete usage examples
-
-## documentation map
-
-- contract: `SKILL.md` (source of truth)
-- roadmap: `docs/TASK.md`
-- change process: `docs/WORKFLOW.md`
-- examples:
-  - `examples/basic-use.md`
-  - `examples/conflicting-facts.md`
-  - `examples/output-example.md`
+- `SKILL.md`: canonical skill contract (source of truth)
+- `README.md`: overview + install guidance
+- `docs/TASK.md`: roadmap and quality bar
+- `docs/WORKFLOW.md`: change process and review checklist
+- `examples/basic-use.md`: baseline scoring and bucket behavior
+- `examples/conflicting-facts.md`: deterministic conflict resolution behavior
