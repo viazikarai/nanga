@@ -14,11 +14,12 @@ make context-anchor a reliable markdown skill for bounded memory carry-forward.
 - [x] deterministic conflict troubleshooting flow documented in `SKILL.md`
 - [x] conflict-focused example added under `examples/`
 - [x] removed redundant example artifact to keep a minimal documentation set
+- [x] decision-centered output contract with anti-memory and state deltas
+- [x] versioned changelog entries for skill behavior changes
 
 ## next
 
 - [ ] add one multi-agent workflow example for codex, claude code, and local runs
-- [ ] add versioned changelog entries for skill behavior changes
 
 ## quality bar
 

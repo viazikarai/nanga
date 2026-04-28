@@ -2,6 +2,8 @@
 
 context-anchor is a memory skill that compresses noisy task context into bounded, high-signal carry-forward state.
 
+the skill preserves signal by compiling context into the minimum state needed for the next decision.
+
 ## when to use
 
 use this skill when:
@@ -19,16 +21,29 @@ optional:
 - `constraints`: non-negotiable limits
 - `scope`: files/surfaces explicitly allowed
 - `notes`: recent observations/results
-- `budget`: max memory item count or token budget
+- `budget`: max memory item count, token budget, or compression level
+- `previous_state`: prior compact memory, when available
 
 ## process
 
 1. parse task and intent
-2. extract candidate memory items
-3. score each item by decision impact and recency
-4. resolve conflicts for competing facts
-5. bucket into `keep`, `deferred`, `drop`
-6. produce compact next-turn prompt from `keep` + required `scope`
+2. define the next `decision_anchor`
+3. extract candidate memory items
+4. score each item by decision impact and recency
+5. resolve conflicts for competing facts
+6. identify `state_delta` versus `previous_state`, when provided
+7. bucket into `keep`, `deferred`, `drop`, and `anti_memory`
+8. produce compact next-turn prompt from `decision_anchor` + `keep` + required `scope`
+
+## decision anchor
+
+always state the next decision the receiving agent must make.
+
+rules:
+- derive `decision_anchor` from `task` + `intent`
+- keep it to one sentence
+- make it action-oriented
+- do not include background facts unless they change the next decision
 
 ## scoring rubric
 
@@ -64,6 +79,65 @@ hard overrides:
 - deduplicate semantically equivalent items; keep the highest-ranked version
 - on conflict, keep newest verified fact and move older conflicting facts to `drop`
 - if `budget` is set, keep only the top-ranked `keep` items within budget and move overflow to `deferred`
+- any item in `keep` must include a reason tag explaining why it affects the next decision
+- a true fact that does not affect the next decision must move to `deferred` or `drop`
+
+## compression levels
+
+if `budget` is a named level, apply these limits after scoring and hard overrides:
+
+- `tight`: max 3 `keep` items
+- `normal`: max 6 `keep` items
+- `expanded`: max 10 `keep` items
+
+if a numeric item limit is provided, use that limit instead of the named levels.
+if a token budget is provided, keep the highest-ranked items that fit the budget.
+overflow from `keep` moves to `deferred` in ranking order.
+
+## reason tags
+
+prefix each `keep` item with one or more concise reason tags.
+
+use stable tags that explain survival value, such as:
+- `[constraint]`: explicit non-negotiable limit
+- `[failure]`: current blocker or observed failure
+- `[state]`: verified current state
+- `[scope]`: allowed or forbidden surface
+- `[next-input]`: fact required for the next implementation or validation step
+
+do not create decorative tags. if a tag does not explain decision impact, omit it.
+
+## state delta
+
+when `previous_state` is provided, include only meaningful changes since that state.
+
+rules:
+- include changed facts that affect `decision_anchor`
+- include newly verified facts that replace older facts
+- do not restate unchanged background
+- if nothing changed, return `state_delta` with `- none`
+
+## open questions
+
+separate uncertainty from memory.
+
+include a question only when:
+- the answer can change the next decision
+- the input does not contain enough verified information to resolve it
+
+do not convert uncertainty into a fact.
+
+## anti-memory
+
+use `anti_memory` for items that should not be carried forward.
+
+include:
+- repeated transcript chatter
+- superseded facts
+- resolved investigations that should not be reopened
+- style or status noise with no decision value
+
+`anti_memory` prevents future runs from rehydrating discarded noise.
 
 ## conflict troubleshooting
 
@@ -85,10 +159,14 @@ use this sequence when two or more items assert different values for the same cl
 
 always return these sections:
 
+- `decision_anchor`: next decision to make
 - `keep`: must-carry-forward items
+- `state_delta`: meaningful changes from prior compact state, or `none`
+- `open_questions`: unresolved questions that can change the next decision
 - `deferred`: useful but not required now
 - `drop`: explicitly discarded noise
-- `compact_prompt`: next-turn prompt using only required memory
+- `anti_memory`: items that must not be carried forward
+- `compact_prompt`: next-turn prompt using only `decision_anchor`, `keep`, required `scope`, and decision-changing `open_questions`
 
 ## hard rules
 
@@ -97,17 +175,38 @@ always return these sections:
 - prefer concise structured memory over transcript dumps
 - do not carry style chatter or duplicate status lines
 - if information conflicts, preserve newest verified fact and flag uncertainty
+- preserve facts because they change the next action, not because they are merely true
+- never include `deferred`, `drop`, or `anti_memory` items in `compact_prompt`
+
+## validation test
+
+the output passes when a fresh agent receiving only `decision_anchor`, `keep`, and `compact_prompt` can make the same next decision.
+
+if the fresh agent cannot make the same next decision, move the missing decision-changing item into `keep`.
+if the fresh agent can make the same next decision without an item, move that item to `deferred`, `drop`, or `anti_memory`.
 
 ## output template
 
 ```text
+decision_anchor:
+...
+
 keep:
+- ...
+
+state_delta:
+- ...
+
+open_questions:
 - ...
 
 deferred:
 - ...
 
 drop:
+- ...
+
+anti_memory:
 - ...
 
 compact_prompt:

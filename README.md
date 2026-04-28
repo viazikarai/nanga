@@ -8,21 +8,28 @@ context-anchor is a markdown-first, agent-agnostic memory skill for constrained 
 2. send structured input with at least:
    - `task`
    - `intent`
-   - optional `constraints`, `scope`, `notes`, `budget`
+   - optional `constraints`, `scope`, `notes`, `budget`, `previous_state`
 3. parse returned sections:
+   - `decision_anchor`
    - `keep`
+   - `state_delta`
+   - `open_questions`
    - `deferred`
    - `drop`
+   - `anti_memory`
    - `compact_prompt`
-4. pass only `keep` + `compact_prompt` into the next execution turn.
-5. persist `deferred` for later, and do not carry `drop` forward.
+4. pass only `decision_anchor` + `keep` + `compact_prompt` into the next execution turn.
+5. persist `deferred` separately, and do not carry `drop` or `anti_memory` forward.
 
 ## behavior guarantees
 
 - deterministic output shape for the same input
+- next-decision anchor for each compression pass
 - explicit scope and constraint carry-forward
 - fixed scoring and bucketing for `keep`, `deferred`, `drop`
 - deterministic conflict resolution for competing facts
+- explicit anti-memory for noise that must not be rehydrated
+- named compression levels for tight, normal, and expanded memory budgets
 - compact next-turn prompt built from required carry-forward state
 
 ## install this skill in your actual project
@@ -56,5 +63,6 @@ then reference `tools/context-anchor/SKILL.md` in your workflow/tooling.
 - `README.md`: overview + install guidance
 - `docs/TASK.md`: roadmap and quality bar
 - `docs/WORKFLOW.md`: change process and review checklist
+- `docs/CHANGELOG.md`: versioned behavior changes
 - `examples/basic-use.md`: baseline scoring and bucket behavior
 - `examples/conflicting-facts.md`: deterministic conflict resolution behavior

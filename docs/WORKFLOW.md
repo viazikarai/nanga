@@ -20,9 +20,12 @@ each change should:
 ## review checklist
 
 - is the output contract still deterministic?
+- does the `decision_anchor` state the next decision in one sentence?
 - did scope boundaries remain explicit?
 - do conflict-resolution rules still produce a single deterministic winner?
-- does compact prompt avoid transcript noise?
+- does `compact_prompt` avoid transcript noise and exclude `deferred`, `drop`, and `anti_memory`?
+- do `keep` items include reason tags that explain decision impact?
+- does `anti_memory` block resolved or noisy context from being carried forward?
 - do examples still match the current skill rules?
 - does `README.md` describe behavior without contradicting `SKILL.md`?
 - are there stale files or references that can be removed to keep the repo minimal?

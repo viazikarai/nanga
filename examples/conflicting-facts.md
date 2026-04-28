@@ -14,10 +14,14 @@ input:
   - standup transcript chatter repeated status updates
 
 expected skill behavior:
+- decision_anchor: decide release readiness using the latest verified migration status
 - keep: release constraint and newest verified migration status (`passed`)
+- state_delta: none because no `previous_state` was provided
+- open_questions: none
 - deferred: monitor-first-write-path note
 - drop: older conflicting failure fact, unverified conflicting claim, repeated chatter
-- compact prompt: proceed with release checks using `passed` as current status and include monitor step
+- anti_memory: older failure, unverified failure claim, repeated status chatter
+- compact prompt: proceed with release checks using `passed` as current status
 
 conflict resolution walkthrough:
 - `migration.status` candidates:
@@ -29,9 +33,18 @@ conflict resolution walkthrough:
 sample output:
 
 ```text
+decision_anchor:
+decide release readiness using the latest verified migration status.
+
 keep:
 - [constraint] do not ship if migration status is failing
-- [fact] migration dry-run passed after patch (10:19, verified)
+- [state][next-input] migration dry-run passed after patch (10:19, verified)
+
+state_delta:
+- none
+
+open_questions:
+- none
 
 deferred:
 - [note] monitor first production write path after deploy
@@ -41,7 +54,12 @@ drop:
 - [conflict:unverified] chat message says migration still failing (10:22, unverified)
 - repeated standup transcript chatter
 
+anti_memory:
+- do not carry the superseded 10:05 migration failure
+- do not carry the unverified 10:22 failure claim
+- do not carry repeated standup status chatter
+
 compact_prompt:
-continue release readiness checks with migration status set to passed (10:19 verified),
-preserve the no-ship-on-failure constraint, and include post-deploy write-path monitoring.
+continue release readiness checks with migration status set to passed (10:19 verified).
+preserve the no-ship-on-failure constraint.
 ```
