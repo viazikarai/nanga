@@ -16,10 +16,12 @@ make context-anchor a reliable markdown skill for bounded memory carry-forward.
 - [x] removed redundant example artifact to keep a minimal documentation set
 - [x] decision-centered output contract with anti-memory and state deltas
 - [x] versioned changelog entries for skill behavior changes
+- [x] multi-agent workflow example for codex, claude code, and local runs
+- [x] magic-test example for fresh-agent signal preservation
 
 ## next
 
-- [ ] add one multi-agent workflow example for codex, claude code, and local runs
+- [ ] add a budget comparison example for tight, normal, and expanded outputs
 
 ## quality bar
 

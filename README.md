@@ -32,6 +32,18 @@ context-anchor is a markdown-first, agent-agnostic memory skill for constrained 
 - named compression levels for tight, normal, and expanded memory budgets
 - compact next-turn prompt built from required carry-forward state
 
+## before and after
+
+before:
+- carry forward transcript dumps, repeated status lines, stale facts, and unverified claims.
+- ask the next agent to infer what still matters.
+- risk reviving discarded context in later runs.
+
+after:
+- carry forward one `decision_anchor`, reason-tagged `keep` items, and a compact prompt.
+- separate `deferred`, `drop`, and `anti_memory` from next-turn context.
+- test whether a fresh agent can make the same next decision from bounded signal.
+
 ## install this skill in your actual project
 
 ### option a: install as a codex skill folder
@@ -66,3 +78,5 @@ then reference `tools/context-anchor/SKILL.md` in your workflow/tooling.
 - `docs/CHANGELOG.md`: versioned behavior changes
 - `examples/basic-use.md`: baseline scoring and bucket behavior
 - `examples/conflicting-facts.md`: deterministic conflict resolution behavior
+- `examples/multi-agent-workflow.md`: codex, claude code, and local/manual handoff behavior
+- `examples/magic-test.md`: fresh-agent preservation test for noisy context
