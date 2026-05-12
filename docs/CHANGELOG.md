@@ -2,6 +2,8 @@
 
 ## unreleased
 
+- added required skill metadata frontmatter so codex can discover `context-anchor`.
+- replaced copy-only install guidance with github clone, local copy, verification, and troubleshooting steps.
 - added `decision_anchor` as the required next-decision summary.
 - added reason tags for `keep` items to explain decision impact.
 - added `state_delta` for meaningful changes from prior compact memory.

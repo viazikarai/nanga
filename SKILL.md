@@ -1,3 +1,9 @@
+---
+name: context-anchor
+description: Compress noisy task context into deterministic, decision-centered carry-forward memory for constrained context windows, multi-agent handoffs, and fresh-agent continuation.
+user-invocable: true
+---
+
 # context-anchor skill
 
 context-anchor is a memory skill that compresses noisy task context into bounded, high-signal carry-forward state.

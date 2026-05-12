@@ -18,6 +18,7 @@ make context-anchor a reliable markdown skill for bounded memory carry-forward.
 - [x] versioned changelog entries for skill behavior changes
 - [x] multi-agent workflow example for codex, claude code, and local runs
 - [x] magic-test example for fresh-agent signal preservation
+- [x] installable codex skill metadata and troubleshooting guidance
 
 ## next
 
