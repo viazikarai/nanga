@@ -169,11 +169,20 @@ git commit -m "chore: update context-anchor skill"
 
 install globally when you want Codex to show or invoke the skill by name instead of referencing a project path.
 
+paste this command in your terminal, not inside codex chat:
+
 ```bash
 git clone https://github.com/viazikarai/nanga.git ~/.codex/skills/context-anchor
 ```
 
-start a new codex session after installing. then invoke it with:
+if the folder already exists, update it instead:
+
+```bash
+cd ~/.codex/skills/context-anchor
+git pull
+```
+
+start a new codex session after installing or updating. then invoke it inside codex chat with:
 
 ```text
 use context-anchor to compress this task state:
@@ -182,6 +191,25 @@ task: <current goal>
 intent: <expected outcome for this iteration>
 notes:
 - <verified fact, observation, conflict, or noisy context>
+budget: tight
+```
+
+`task state` means the current work context you want to preserve for the next turn or next agent. include the goal, expected outcome, constraints, allowed scope, and important notes.
+
+example task state:
+
+```text
+task: continue checkout retry fix
+intent: preserve only the facts needed for the next implementation pass
+constraints:
+- do not change the payment provider API
+scope:
+- src/checkout/retry.ts
+notes:
+- retry failed on expired session
+- latest verified fix refreshes token before retry
+- old logs repeated timeout messages
+- unverified comment says provider is down
 budget: tight
 ```
 
